@@ -1,0 +1,7 @@
+services:
+  maple:
+    ports:
+      - "1965:1965"
+    volumes:
+      - "./.maple:/maple/.maple"
+    image: "fuwn/maple:latest"

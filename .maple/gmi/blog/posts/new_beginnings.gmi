@@ -1,0 +1,5 @@
+# New Beginnings
+
+A Gemini server is born!
+
+=> /blog/index.gmi Back
