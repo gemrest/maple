@@ -1,0 +1,7 @@
+# Maple
+
+Hello, World!
+
+## Links
+
+=> /blog/index.gmi Blog

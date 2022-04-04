@@ -1,0 +1,18 @@
+cc       = clang++
+cxxflags = -Weverything -Wno-c++98-compat -std=c++20
+ldflags  = -lssl -lcrypto
+out_dir  = out
+name     = maple
+src_dir  = $name
+
+rule compile
+  command = $cc $cxxflags -c $in -o $out
+
+rule link
+  command = $cc $ldflags $in -o $out
+
+build $out_dir/$name.o: compile $src_dir/$name.cc
+
+build $out_dir/$name: link $out_dir/$name.o
+
+default $out_dir/$name

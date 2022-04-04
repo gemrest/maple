@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+read \
+  -rp \
+  "Which common name (hostname) would you like to use for the generated key? " \
+  common_name
+
+openssl req \
+  -new \
+  -subj "/CN=$common_name" \
+  -x509 \
+  -newkey ec \
+  -pkeyopt ec_paramgen_curve:prime256v1 \
+  -days 365 \
+  -nodes \
+  -out .maple/public.pem \
+  -keyout .maple/private.pem \
+  -inform pem

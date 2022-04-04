@@ -1,0 +1,13 @@
+# Development
+*.pem
+out/
+
+# CMake
+cmake-build-*/
+CMakeLists.txt
+
+# Ninja
+.ninja_*
+
+# IDE
+.idea/
