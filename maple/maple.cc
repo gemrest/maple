@@ -171,10 +171,18 @@ auto main() -> int {
 
       path = path.substr(0, path.size() - 2); // Remove "\r\n"
       path.erase(0, 9); // Remove "gemini://"
-      path = path.substr(
-        path.find_first_of('/'),
-        path.size() - 1
-      ); // Remove host
+
+      // Try to remove the host, if you cannot; it must be a trailing slash-less
+      // hostname, so we will respond with the index.
+      size_t found_first = path.find_first_of('/');
+      if (found_first != std::string::npos) {
+        path = path.substr(
+          found_first,
+          path.size() - 1
+        ); // Remove host
+      } else {
+        path = "/index.gmi";
+      }
 
       // Remove junk, if any
       index_of_junk = path.find_first_of('\n');
@@ -200,7 +208,16 @@ auto main() -> int {
 
         response << "20 text/gemini\r\n" << buffer.str();
       } else {
-        response << "51 The server (Maple) could not find the specified file.\r\n";
+        if (path.empty() || path == "/") {
+          std::ifstream file(".maple/gmi/index.gmi");
+          std::stringstream buffer;
+
+          buffer << file.rdbuf();
+
+          response << "20 text/gemini\r\n" << buffer.str();
+        } else {
+          response << "51 The server (Maple) could not find the specified file.\r\n";
+        }
       }
 
       std::cout << "requested " << path << std::endl;
