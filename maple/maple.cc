@@ -32,14 +32,17 @@
 static int maple_socket;
 static SSL_CTX *ssl_context;
 
-auto handle_shutdown(int) -> void;
-
 auto main() -> int {
   sockaddr_in socket_address {};
   std::vector<std::string> gemini_files;
 
   // Try a graceful shutdown when a SIGINT is detected
-  signal(SIGINT, handle_shutdown);
+  signal(SIGINT, [](int signal_){
+    std::cout << "shutdown(" << signal_ << ")" << std::endl;
+
+    close(maple_socket);
+    SSL_CTX_free(ssl_context);
+  });
 
   // Find and keep track of all Gemini files to serve
   for (const auto &entry :
@@ -209,11 +212,4 @@ auto main() -> int {
     SSL_free(ssl);
     close(client);
   }
-}
-
-auto handle_shutdown(int signal) -> void {
-  std::cout << "shutdown(" << signal << ")" << std::endl;
-
-  close(maple_socket);
-  SSL_CTX_free(ssl_context);
 }
