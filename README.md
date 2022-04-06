@@ -1,7 +1,7 @@
 # Maple
 
 A very simple static Gemini server; written within a single file and liberally
-spanning 166 lines-of-code.
+spanning 159 lines-of-code.
 
 ## Usage
 
