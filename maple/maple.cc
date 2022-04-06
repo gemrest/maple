@@ -39,7 +39,7 @@ auto main() -> int {
   std::vector<std::string> gemini_files;
 
   // Try a graceful shutdown when a SIGINT is detected
-  signal(SIGINT, [](int signal_){
+  signal(SIGINT, [](int signal_) -> void {
     std::cout << "shutdown(" << signal_ << ")" << std::endl;
 
     close(maple_socket);
@@ -47,7 +47,7 @@ auto main() -> int {
   });
 
   // Find and keep track of all Gemini files to serve
-  for (const auto &entry :
+  for (const std::filesystem::directory_entry &entry :
     std::filesystem::recursive_directory_iterator(".maple/gmi")) {
 
     std::string file_extension = entry.path().string().substr(
@@ -61,7 +61,7 @@ auto main() -> int {
       file_extension.end(),
       gemini_file_extension.begin(),
       gemini_file_extension.end(),
-      [](auto a, auto b) {
+      [](auto a, auto b) -> bool {
         return std::tolower(a) == std::tolower(b);
       }
     )) {
@@ -70,7 +70,7 @@ auto main() -> int {
   }
 
   // Inform user of which files will be served
-  for (const auto &file : gemini_files) {
+  for (const std::string &file : gemini_files) {
     std::cout << "serving " << file << std::endl;
   }
 
