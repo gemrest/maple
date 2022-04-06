@@ -1,0 +1,3 @@
+[submodule ".maple/gmi"]
+	path = .maple/gmi
+	url = https://github.com/gemrest/gem.rest
