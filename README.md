@@ -37,6 +37,12 @@ field which should be modified is the `ports`, if you have to.
 1. Build: `ninja` (requires [Ninja](https://ninja-build.org/))
 2. Run: `out/maple`
 
+## Capsules using Maple
+
+[Add yours!](https://github.com/gemrest/maple/edit/main/README.md)
+
+- <gemini://gem.rest/> (<https://gem.rest/>)
+
 ## License
 
 This project is licensed with the [GNU General Public License v3.0](./LICENSE).
