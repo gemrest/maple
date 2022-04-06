@@ -32,6 +32,8 @@
 static int maple_socket;
 static SSL_CTX *ssl_context;
 
+auto exit_with[[noreturn]](const char *, bool) -> void;
+
 auto main() -> int {
   sockaddr_in socket_address {};
   std::vector<std::string> gemini_files;
@@ -78,9 +80,7 @@ auto main() -> int {
 
   ssl_context = SSL_CTX_new(TLS_server_method());
   if (!ssl_context) {
-    perror("unable to create ssl context");
-    ERR_print_errors_fp(stderr);
-    std::exit(EXIT_FAILURE);
+    exit_with("unable to create ssl context", true);
   }
 
   if (SSL_CTX_use_certificate_file(
@@ -88,18 +88,14 @@ auto main() -> int {
     ".maple/public.pem",
     SSL_FILETYPE_PEM
   ) <= 0) {
-    perror("unable to use certificate file");
-    ERR_print_errors_fp(stderr);
-    std::exit(EXIT_FAILURE);
+    exit_with("unable to use certificate file", true);
   }
   if (SSL_CTX_use_PrivateKey_file(
     ssl_context,
     ".maple/private.pem",
     SSL_FILETYPE_PEM
   ) <= 0) {
-    perror("unable to use private key file");
-    ERR_print_errors_fp(stderr);
-    std::exit(EXIT_FAILURE);
+    exit_with("unable to use private key file", true);
   }
 
   socket_address.sin_family = AF_INET;
@@ -108,8 +104,7 @@ auto main() -> int {
 
   maple_socket = socket(AF_INET, SOCK_STREAM, 0);
   if (maple_socket < 0) {
-    perror("unable to create socket");
-    std::exit(EXIT_FAILURE);
+    exit_with("unable to create socket", false);
   }
 
   // Reuse address. Allows the use of the address instantly after a SIGINT
@@ -122,8 +117,7 @@ auto main() -> int {
     &reuse_addr,
     sizeof(int)
   ) < 0) {
-    perror("unable to set socket options (SO_LINGER)");
-    std::exit(EXIT_FAILURE);
+    exit_with("unable to set socket options (SO_LINGER)", false);
   }
 
   if (bind(
@@ -131,12 +125,10 @@ auto main() -> int {
     reinterpret_cast<sockaddr *>(&socket_address),
     sizeof(socket_address)
   ) < 0) {
-    perror("unable to bind");
-    std::exit(EXIT_FAILURE);
+    exit_with("unable to bind", false);
   }
   if (listen(maple_socket, 1) < 0) {
-    perror("unable to listen");
-    std::exit(EXIT_FAILURE);
+    exit_with("unable to listen", false);
   }
 
   // Listen and serve connections
@@ -151,10 +143,7 @@ auto main() -> int {
     );
     char request[1024];
 
-    if (client < 0) {
-      perror("unable to accept");
-      std::exit(EXIT_FAILURE);
-    }
+    if (client < 0) { exit_with("unable to accept", false); }
 
     ssl = SSL_new(ssl_context);
     SSL_set_fd(ssl, client);
@@ -229,4 +218,10 @@ auto main() -> int {
     SSL_free(ssl);
     close(client);
   }
+}
+
+auto exit_with[[noreturn]](const char *message, bool ssl) -> void {
+  perror(message);
+  if (ssl) { ERR_print_errors_fp(stderr); }
+  std::exit(EXIT_FAILURE);
 }
