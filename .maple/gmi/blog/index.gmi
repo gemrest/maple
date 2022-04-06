@@ -1,7 +1,0 @@
-# Blog
-
-=> /index.gmi Back
-
-## Posts
-
-=> /blog/posts/new_beginnings.gmi New Beginnings
