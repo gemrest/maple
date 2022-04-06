@@ -208,8 +208,8 @@ auto main() -> int {
 
         response << "20 text/gemini\r\n" << buffer.str();
       } else {
-        if (path.empty() || path == "/") {
-          std::ifstream file(".maple/gmi/index.gmi");
+        if (path.empty() || path.at(path.length() - 1) == '/') {
+          std::ifstream file(".maple/gmi" + path + "index.gmi");
           std::stringstream buffer;
 
           buffer << file.rdbuf();
