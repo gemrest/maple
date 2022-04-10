@@ -61,12 +61,8 @@ auto main() -> int {
       file_extension.end(),
       gemini_file_extension.begin(),
       gemini_file_extension.end(),
-      [](char a, char b) -> bool {
-        return std::tolower(a) == std::tolower(b);
-      }
-    )) {
-      gemini_files.push_back(entry.path());
-    }
+      [](char a, char b) -> bool { return std::tolower(a) == std::tolower(b); }
+    )) { gemini_files.push_back(entry.path()); }
   }
 
   // Inform user of which files will be served
@@ -79,33 +75,25 @@ auto main() -> int {
   SSL_load_error_strings();
 
   ssl_context = SSL_CTX_new(TLS_server_method());
-  if (!ssl_context) {
-    exit_with("unable to create ssl context", true);
-  }
+  if (!ssl_context) { exit_with("unable to create ssl context", true); }
 
   if (SSL_CTX_use_certificate_file(
     ssl_context,
     ".maple/public.pem",
     SSL_FILETYPE_PEM
-  ) <= 0) {
-    exit_with("unable to use certificate file", true);
-  }
+  ) <= 0) { exit_with("unable to use certificate file", true); }
   if (SSL_CTX_use_PrivateKey_file(
     ssl_context,
     ".maple/private.pem",
     SSL_FILETYPE_PEM
-  ) <= 0) {
-    exit_with("unable to use private key file", true);
-  }
+  ) <= 0) { exit_with("unable to use private key file", true); }
 
   socket_address.sin_family = AF_INET;
   socket_address.sin_port = htons(1965);
   socket_address.sin_addr.s_addr = htonl(INADDR_ANY);
 
   maple_socket = socket(AF_INET, SOCK_STREAM, 0);
-  if (maple_socket < 0) {
-    exit_with("unable to create socket", false);
-  }
+  if (maple_socket < 0) { exit_with("unable to create socket", false); }
 
   // Reuse address. Allows the use of the address instantly after a SIGINT
   // without having to wait for the socket to die.
@@ -116,20 +104,14 @@ auto main() -> int {
     SO_REUSEADDR,
     &reuse_addr,
     sizeof(int)
-  ) < 0) {
-    exit_with("unable to set socket options (SO_LINGER)", false);
-  }
+  ) < 0) { exit_with("unable to set socket options (SO_LINGER)", false); }
 
   if (bind(
     maple_socket,
     reinterpret_cast<sockaddr *>(&socket_address),
     sizeof(socket_address)
-  ) < 0) {
-    exit_with("unable to bind", false);
-  }
-  if (listen(maple_socket, 1) < 0) {
-    exit_with("unable to listen", false);
-  }
+  ) < 0) { exit_with("unable to bind", false); }
+  if (listen(maple_socket, 1) < 0) { exit_with("unable to listen", false); }
 
   // Listen and serve connections
   for (;;) {
@@ -165,10 +147,7 @@ auto main() -> int {
       // hostname, so we will respond with the index.
       size_t found_first = path.find_first_of('/');
       if (found_first != std::string::npos) {
-        path = path.substr(
-          found_first,
-          path.size() - 1
-        ); // Remove host
+        path = path.substr(found_first, path.size() - 1); // Remove host
       } else {
         path = "/index.gmi";
       }
@@ -176,10 +155,7 @@ auto main() -> int {
       // Remove junk, if any
       index_of_junk = path.find_first_of('\n');
       if (index_of_junk != std::string::npos) {
-        path.erase(
-          path.find_first_of('\n') - 1,
-          path.size() - 1
-        );
+        path.erase(path.find_first_of('\n') - 1, path.size() - 1);
       }
 
       // Check if the route is a file being served
