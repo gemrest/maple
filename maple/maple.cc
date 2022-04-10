@@ -61,7 +61,7 @@ auto main() -> int {
       file_extension.end(),
       gemini_file_extension.begin(),
       gemini_file_extension.end(),
-      [](auto a, auto b) -> bool {
+      [](char a, char b) -> bool {
         return std::tolower(a) == std::tolower(b);
       }
     )) {
