@@ -1,7 +1,7 @@
 # Maple
 
 A very simple static Gemini server; written within a single file and liberally
-spanning 135 lines-of-code.
+spanning 152 lines-of-code.
 
 ## Usage
 
@@ -36,6 +36,20 @@ field which should be modified is the `ports`, if you have to.
 
 1. Build: `ninja` (requires [Ninja](https://ninja-build.org/))
 2. Run: `out/maple`
+
+### Hacking
+
+If you decide to tamper with Maple, you should give your commits a test. As
+there isn't a test suite yet, feel free to use any of these examples:
+
+```bash
+# Using OpenSSL directly to debug different requests:
+$ openssl s_client -ign_eof -quiet -connect localhost:1965 <<< \
+> "gemini://localhost:1965"
+
+# Using Bollux to debug proper requests... or any client!
+$ bollux localhost
+```
 
 ## Capsules using Maple
 
