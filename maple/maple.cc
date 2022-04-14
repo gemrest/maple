@@ -38,6 +38,7 @@ auto main() -> int {
   sockaddr_in socket_address {};
   std::vector<std::string> gemini_files;
   const std::string GEMINI_FILE_EXTENSION = "gmi";
+  const std::string GEMINI_PROTOCOL = "gemini://";
 
   // Try a graceful shutdown when a SIGINT is detected
   signal(SIGINT, [](int signal_) -> void {
@@ -135,12 +136,14 @@ auto main() -> int {
     } else {
       std::stringstream response;
       size_t index_of_junk;
+      std::string protocol;
 
       SSL_read(ssl, request, sizeof(request));
 
       std::string path(request);
 
       path = path.substr(0, path.size() - 2); // Remove "\r\n"
+      protocol = path.substr(0, 9);
       path.erase(0, 9); // Remove "gemini://"
 
       // Try to remove the host, if you cannot; it must be a trailing slash-less
@@ -181,7 +184,21 @@ auto main() -> int {
 
           response << "20 text/gemini\r\n" << buffer.str();
         } else {
-          response << "51 The server (Maple) could not find the specified file.\r\n";
+          if (std::equal(
+            protocol.begin(),
+            protocol.end(),
+            GEMINI_PROTOCOL.begin(),
+            GEMINI_PROTOCOL.end(),
+            [](char a, char b) -> bool {
+              return std::tolower(a) == std::tolower(b);
+            }
+          )) {
+            response << "51 The server (Maple) could not find the specified file"
+              ".\r\n";
+          } else {
+            response << "59 The server (Maple) received a bad request: Invalid "
+              "protocol\r\n";
+          }
         }
       }
 
