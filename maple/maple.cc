@@ -37,6 +37,7 @@ auto exit_with[[noreturn]](const char *, bool) -> void;
 auto main() -> int {
   sockaddr_in socket_address {};
   std::vector<std::string> gemini_files;
+  const std::string GEMINI_FILE_EXTENSION = "gmi";
 
   // Try a graceful shutdown when a SIGINT is detected
   signal(SIGINT, [](int signal_) -> void {
@@ -53,14 +54,13 @@ auto main() -> int {
     std::string file_extension = entry.path().string().substr(
       entry.path().string().find_last_of('.') + 1
     );
-    std::string gemini_file_extension = "gmi";
 
     // Only keep track of file if it is a Gemini file
     if (std::equal(
       file_extension.begin(),
       file_extension.end(),
-      gemini_file_extension.begin(),
-      gemini_file_extension.end(),
+      GEMINI_FILE_EXTENSION.begin(),
+      GEMINI_FILE_EXTENSION.end(),
       [](char a, char b) -> bool { return std::tolower(a) == std::tolower(b); }
     )) { gemini_files.push_back(entry.path()); }
   }
