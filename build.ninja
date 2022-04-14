@@ -1,5 +1,5 @@
 cc       = clang++
-cxxflags = -Weverything -Wno-c++98-compat -std=c++20
+cxxflags = -Weverything -Wno-c++98-compat -std=c++2b
 ldflags  = -lssl -lcrypto
 out_dir  = out
 name     = maple
