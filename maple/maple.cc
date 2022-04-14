@@ -193,11 +193,9 @@ auto main() -> int {
               return std::tolower(a) == std::tolower(b);
             }
           )) {
-            response << "51 The server (Maple) could not find the specified file"
-              ".\r\n";
+            response << "51 The server (Maple) could not find the specified file.\r\n";
           } else {
-            response << "59 The server (Maple) received a bad request: Invalid "
-              "protocol\r\n";
+            response << "59 The server (Maple) received a bad request: Invalid protocol\r\n";
           }
         }
       }
