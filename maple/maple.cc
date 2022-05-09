@@ -243,8 +243,6 @@ auto main() -> int {
           path = "/index.gmi";
         }
 
-//        std::cout << "1: \"" << path << "\"" << std::endl;
-
         if (request_scheme == 1) {
           // Remove junk, if any
           index_of_junk = path.find_first_of('\n');
@@ -255,8 +253,6 @@ auto main() -> int {
             );
           }
         }
-
-//        std::cout << "2: \"" << path << "\"" << std::endl;
 
         // Gemini
         if (request_scheme == 1) {
