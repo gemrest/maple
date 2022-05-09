@@ -37,6 +37,7 @@ auto main() -> int {
   bool titan = false;
   std::string titan_token;
   size_t titan_max_size = 0;
+  const std::string GEMINI_FILE_EXTENSION = "gmi";
 
   // Check if the user is want to support Titan and set it up
   maple::setup_environment(titan, titan_token, titan_max_size);
@@ -61,8 +62,8 @@ auto main() -> int {
     if (std::equal(
       file_extension.begin(),
       file_extension.end(),
-      std::string("gmi").begin(),
-      std::string("gmi").end(),
+      GEMINI_FILE_EXTENSION.begin(),
+      GEMINI_FILE_EXTENSION.end(),
       [](char a, char b) -> bool { return std::tolower(a) == std::tolower(b); }
     )) {
       gemini_files.push_back(entry.path());
