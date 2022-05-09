@@ -1,15 +1,18 @@
-FROM alpine:latest as dependencies
+FROM alpine:latest as environment
 
 RUN apk update \
     && apk upgrade \
-    && apk add --no-cache \
+    && apk add --no-cache libstdc++
+
+FROM environment as build_environment
+
+RUN apk add --no-cache \
     clang \
     ninja \
     alpine-sdk \
-    openssl-dev \
-    libstdc++
+    openssl-dev
 
-FROM dependencies as builder
+FROM build_environment as builder
 
 WORKDIR /maple
 
@@ -17,7 +20,7 @@ COPY ./ ./
 
 RUN ninja
 
-FROM dependencies
+FROM environment
 
 WORKDIR /maple
 
