@@ -1,7 +1,17 @@
 # Maple
 
-A very simple static Gemini server; written within a single file and liberally
-spanning 159 lines-of-code.
+A very simple static Gemini server, now with Titan support!
+
+### Lines-of-code
+This codebase is now 351 lines of lines-of-code!
+
+The statement "... written within a single file and liberally
+spanning 159 lines-of-code." has been removed.
+
+If you would still like the minimal 159-LOC experience, checkout
+[49ce0f8](https://github.com/gemrest/maple/tree/49ce0f83b8abd1af4760e56c1673c6997ef8a2c4)!
+(Docker tag `0.1.4`) Do note, that version of this project is outdated and only
+has Gemini support.
 
 ## Usage
 
@@ -24,6 +34,34 @@ Gemini content must be placed in a directory -- directly adjacent to the
 Docker Compose file or executable -- named [`.maple/gmi`](.maple/gmi) and
 ending with the file extension `.gmi`.
 
+### Environment Variables
+
+Maple can be configured with three optional environment variables:
+
+#### `TITAN`
+
+Enable Titan support.
+
+Takes a value of either `true` or `1`, case-insensitive.
+
+Defaults to off.
+
+#### `TITAN_TOKEN`
+
+Set a token to restrict Titan access.
+
+Takes a string value, case-sensitive.
+
+Defaults to no token, **anyone can upload!**
+
+#### `TITAN_MAX_SIZE`
+
+The maximum size in bytes which a Titan upload is permitted to perform.
+
+Takes an integer.
+
+Default to `1024`.
+
 ### Docker Compose
 
 A Docker Compose file is already setup [here](./docker-compose.yaml). The only
@@ -35,7 +73,8 @@ field which should be modified is the `ports`, if you have to.
 ### Executable
 
 1. Build: `ninja` (requires [Ninja](https://ninja-build.org/))
-2. Run: `out/maple`
+2. Run: `out/maple`, or
+   `TITAN=1 TITAN_TOKEN=secret TITAN_MAX_SIZE=2048 out/maple`
 
 ## Capsules using Maple
 
