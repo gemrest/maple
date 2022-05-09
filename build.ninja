@@ -11,8 +11,10 @@ rule compile
 rule link
   command = $cc $ldflags $in -o $out
 
-build $out_dir/$name.o: compile $src_dir/$name.cc
+build $out_dir/$name.o:  compile $src_dir/$name.cc
+build $out_dir/gemini.o: compile $src_dir/gemini.cc
+build $out_dir/titan.o:  compile $src_dir/titan.cc
 
-build $out_dir/$name: link $out_dir/$name.o
+build $out_dir/$name: link $out_dir/$name.o $out_dir/gemini.o $out_dir/titan.o
 
 default $out_dir/$name
