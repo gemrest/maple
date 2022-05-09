@@ -190,7 +190,6 @@ auto main() -> int {
       reinterpret_cast<sockaddr *>(&socket_address_),
       &socket_address_length
     );
-    char request[1024];
 
     if (client < 0) { maple::exit_with("unable to accept", false); }
 
@@ -204,6 +203,7 @@ auto main() -> int {
       size_t index_of_junk;
       int request_scheme; // Gemini = 1, Titan = 2, Error = 0
       size_t bytes_read;
+      char request[1024];
 
       SSL_read_ex(ssl, request, sizeof(request), &bytes_read);
 
@@ -291,7 +291,9 @@ auto main() -> int {
 namespace maple {
   auto exit_with[[noreturn]](const char *message, bool ssl) -> void {
     perror(message);
+
     if (ssl) { ERR_print_errors_fp(stderr); }
+
     std::exit(EXIT_FAILURE);
   }
 }
