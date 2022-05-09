@@ -52,8 +52,8 @@ auto main() -> int {
 
   // Find and keep track of all Gemini files to serve
   for (const std::filesystem::directory_entry &entry :
-    std::filesystem::recursive_directory_iterator(".maple/gmi")) {
-
+    std::filesystem::recursive_directory_iterator(".maple/gmi"))
+  {
     std::string file_extension = entry.path().string().substr(
       entry.path().string().find_last_of('.') + 1
     );
@@ -102,7 +102,7 @@ auto main() -> int {
       size_t index_of_junk;
       int request_scheme; // Gemini = 1, Titan = 2, Error = 0
       size_t bytes_read;
-      char request[1024];
+      char request[1024] {};
 
       SSL_read_ex(ssl, request, sizeof(request), &bytes_read);
 
