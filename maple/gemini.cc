@@ -36,23 +36,12 @@ namespace maple::gemini {
       ".maple/gmi" + path
     ) != gemini_files.end()) {
       // If the route is a file being served; get the file contents
-
-      std::ifstream file(".maple/gmi" + path);
-      std::stringstream buffer;
-
-      buffer << file.rdbuf();
-
-      file.close();
-
-      response << "20 text/gemini\r\n" << buffer.str();
+      response << "20 text/gemini\r\n"
+        << std::ifstream(".maple/gmi" + path).rdbuf();
     } else {
       if (path.empty() || path.at(path.length() - 1) == '/') {
-        std::ifstream file(".maple/gmi" + path + "index.gmi");
-        std::stringstream buffer;
-
-        buffer << file.rdbuf();
-
-        response << "20 text/gemini\r\n" << buffer.str();
+        response << "20 text/gemini\r\n"
+          << std::ifstream(".maple/gmi" + path + "index.gmi").rdbuf();
       } else {
         response
           << "51 The server (Maple) could not find the specified file.\r\n";
