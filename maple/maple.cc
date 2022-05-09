@@ -39,53 +39,8 @@ auto main() -> int {
   std::string titan_token;
   size_t titan_max_size = 0;
 
-  // Check if the user is want to support Titan
-  {
-    char *titan_environment = std::getenv("TITAN");
-
-    if (titan_environment == nullptr) {
-      titan = false;
-    } else {
-      std::string valid_titan_environment(titan_environment);
-
-      std::transform(
-        valid_titan_environment.begin(),
-        valid_titan_environment.end(),
-        valid_titan_environment.begin(),
-        [](unsigned char c) -> int { return std::tolower(c); }
-      );
-
-      if (valid_titan_environment == "true" || valid_titan_environment == "1") {
-        char *unvalidated_titan_token = std::getenv("TITAN_TOKEN");
-        char *unvalidated_titan_max_size = std::getenv("TITAN_MAX_SIZE");
-
-        if (unvalidated_titan_token == nullptr) {
-          titan_token = "";
-        } else {
-          titan_token = std::string(unvalidated_titan_token);
-        }
-
-        if (unvalidated_titan_max_size == nullptr) {
-          titan_max_size = 1024;
-
-          std::cout << "no TITAN_MAX_SIZE set, defaulting to 1024" << std::endl;
-        } else {
-          try {
-            titan_max_size = static_cast<size_t>(
-              std::stoi(unvalidated_titan_max_size)
-            );
-          } catch (...) {
-            maple::exit_with(
-              "TITAN_MAX_SIZE could not be interpreted as an integer",
-              false
-            );
-          }
-        }
-
-        titan = true;
-      }
-    }
-  }
+  // Check if the user is want to support Titan and set it up
+  maple::setup_environment(titan, titan_token, titan_max_size);
 
   // Try a graceful shutdown when a SIGINT is detected
   signal(SIGINT, [](int signal_) -> void {
@@ -295,5 +250,56 @@ namespace maple {
     if (ssl) { ERR_print_errors_fp(stderr); }
 
     std::exit(EXIT_FAILURE);
+  }
+
+  auto setup_environment(
+    bool &titan,
+    std::string &titan_token,
+    size_t &titan_max_size
+  ) -> void {
+    char *titan_environment = std::getenv("TITAN");
+
+    if (titan_environment == nullptr) {
+      titan = false;
+    } else {
+      std::string valid_titan_environment(titan_environment);
+
+      std::transform(
+        valid_titan_environment.begin(),
+        valid_titan_environment.end(),
+        valid_titan_environment.begin(),
+        [](unsigned char c) -> int { return std::tolower(c); }
+      );
+
+      if (valid_titan_environment == "true" || valid_titan_environment == "1") {
+        char *unvalidated_titan_token = std::getenv("TITAN_TOKEN");
+        char *unvalidated_titan_max_size = std::getenv("TITAN_MAX_SIZE");
+
+        if (unvalidated_titan_token == nullptr) {
+          titan_token = "";
+        } else {
+          titan_token = std::string(unvalidated_titan_token);
+        }
+
+        if (unvalidated_titan_max_size == nullptr) {
+          titan_max_size = 1024;
+
+          std::cout << "no TITAN_MAX_SIZE set, defaulting to 1024" << std::endl;
+        } else {
+          try {
+            titan_max_size = static_cast<size_t>(
+              std::stoi(unvalidated_titan_max_size)
+            );
+          } catch (...) {
+            maple::exit_with(
+              "TITAN_MAX_SIZE could not be interpreted as an integer",
+              false
+            );
+          }
+        }
+
+        titan = true;
+      }
+    }
   }
 }

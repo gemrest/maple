@@ -28,6 +28,7 @@ namespace maple {
   static SSL_CTX *ssl_context;
 
   auto exit_with[[noreturn]](const char *, bool) -> void;
+  auto setup_environment(bool &, std::string &, size_t &) -> void;
 }
 
 #endif // MAPLE_HH
