@@ -29,6 +29,7 @@ namespace maple {
 
   auto exit_with[[noreturn]](const char *, bool) -> void;
   auto setup_environment(bool &, std::string &, size_t &) -> void;
+  auto setup_ssl() -> void;
 }
 
 #endif // MAPLE_HH

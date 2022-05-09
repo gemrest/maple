@@ -33,7 +33,6 @@
 #include "titan.hh"
 
 auto main() -> int {
-  sockaddr_in socket_address {};
   std::vector<std::string> gemini_files;
   bool titan = false;
   std::string titan_token;
@@ -43,8 +42,8 @@ auto main() -> int {
   maple::setup_environment(titan, titan_token, titan_max_size);
 
   // Try a graceful shutdown when a SIGINT is detected
-  signal(SIGINT, [](int signal_) -> void {
-    std::cout << "shutdown(" << signal_ << ")" << std::endl;
+  signal(SIGINT, [](int _signal) -> void {
+    std::cout << "shutdown(" << _signal << ")" << std::endl;
 
     close(maple::maple_socket);
     SSL_CTX_free(maple::ssl_context);
@@ -77,63 +76,8 @@ auto main() -> int {
     std::cout << "serving " << file << std::endl;
   }
 
-  // Setup OpenSSL
-  SSL_library_init();
-  SSL_load_error_strings();
-
-  maple::ssl_context = SSL_CTX_new(TLS_server_method());
-  if (!maple::ssl_context) {
-    maple::exit_with("unable to create ssl context", true);
-  }
-
-  if (SSL_CTX_use_certificate_file(
-    maple::ssl_context,
-    ".maple/public.pem",
-    SSL_FILETYPE_PEM
-  ) <= 0) {
-    maple::exit_with("unable to use certificate file", true);
-  }
-  if (SSL_CTX_use_PrivateKey_file(
-    maple::ssl_context,
-    ".maple/private.pem",
-    SSL_FILETYPE_PEM
-  ) <= 0) {
-    maple::exit_with("unable to use private key file", true);
-  }
-
-  socket_address.sin_family = AF_INET;
-  socket_address.sin_port = htons(1965);
-  socket_address.sin_addr.s_addr = htonl(INADDR_ANY);
-
-  maple::maple_socket = socket(AF_INET, SOCK_STREAM, 0);
-
-  if (maple::maple_socket < 0) {
-    maple::exit_with("unable to create socket", false);
-  }
-
-  // Reuse address. Allows the use of the address instantly after a SIGINT
-  // without having to wait for the socket to die.
-  int reuse_addr = 1;
-  if (setsockopt(
-    maple::maple_socket,
-    SOL_SOCKET,
-    SO_REUSEADDR,
-    &reuse_addr,
-    sizeof(int)
-  ) < 0) {
-    maple::exit_with("unable to set socket options (SO_LINGER)", false);
-  }
-
-  if (bind(
-    maple::maple_socket,
-    reinterpret_cast<sockaddr *>(&socket_address),
-    sizeof(socket_address)
-  ) < 0) {
-    maple::exit_with("unable to bind", false);
-  }
-  if (listen(maple::maple_socket, 1) < 0) {
-    maple::exit_with("unable to listen", false);
-  }
+  // Setup SSL
+  maple::setup_ssl();
 
   // Listen and serve connections
   for (;;) {
@@ -149,6 +93,7 @@ auto main() -> int {
     if (client < 0) { maple::exit_with("unable to accept", false); }
 
     ssl = SSL_new(maple::ssl_context);
+
     SSL_set_fd(ssl, client);
 
     if (SSL_accept(ssl) <= 0) {
@@ -189,6 +134,7 @@ auto main() -> int {
         // Try to remove the host, if you cannot; it must be a trailing
         // slash-less hostname, so we will respond with the index.
         size_t found_first = path.find_first_of('/');
+
         if (found_first != std::string::npos) {
           path = path.substr(
             found_first,
@@ -201,6 +147,7 @@ auto main() -> int {
         if (request_scheme == 1) {
           // Remove junk, if any
           index_of_junk = path.find_first_of('\n');
+
           if (index_of_junk != std::string::npos) {
             path.erase(
               path.find_first_of('\n') - 1,
@@ -300,6 +247,69 @@ namespace maple {
 
         titan = true;
       }
+    }
+  }
+
+  auto setup_ssl() -> void {
+    sockaddr_in socket_address {};
+
+    // Setup OpenSSL
+    SSL_library_init();
+    SSL_load_error_strings();
+
+    maple::ssl_context = SSL_CTX_new(TLS_server_method());
+
+    if (!maple::ssl_context) {
+      maple::exit_with("unable to create ssl context", true);
+    }
+
+    if (SSL_CTX_use_certificate_file(
+      maple::ssl_context,
+      ".maple/public.pem",
+      SSL_FILETYPE_PEM
+    ) <= 0) {
+      maple::exit_with("unable to use certificate file", true);
+    }
+    if (SSL_CTX_use_PrivateKey_file(
+      maple::ssl_context,
+      ".maple/private.pem",
+      SSL_FILETYPE_PEM
+    ) <= 0) {
+      maple::exit_with("unable to use private key file", true);
+    }
+
+    socket_address.sin_family = AF_INET;
+    socket_address.sin_port = htons(1965);
+    socket_address.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    maple::maple_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (maple::maple_socket < 0) {
+      maple::exit_with("unable to create socket", false);
+    }
+
+    // Reuse address. Allows the use of the address instantly after a SIGINT
+    // without having to wait for the socket to die.
+    int reuse_addr = 1;
+    if (setsockopt(
+      maple::maple_socket,
+      SOL_SOCKET,
+      SO_REUSEADDR,
+      &reuse_addr,
+      sizeof(int)
+    ) < 0) {
+      maple::exit_with("unable to set socket options (SO_LINGER)", false);
+    }
+
+    if (bind(
+      maple::maple_socket,
+      reinterpret_cast<sockaddr *>(&socket_address),
+      sizeof(socket_address)
+    ) < 0) {
+      maple::exit_with("unable to bind", false);
+    }
+    if (listen(maple::maple_socket, 1) < 0) {
+      maple::exit_with("unable to listen", false);
     }
   }
 }
