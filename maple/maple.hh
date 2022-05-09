@@ -27,9 +27,9 @@ namespace maple {
   static int maple_socket;
   static SSL_CTX *ssl_context;
 
-  auto exit_with[[noreturn]](const char *, bool) -> void;
-  auto setup_environment(bool &, std::string &, size_t &) -> void;
-  auto setup_ssl() -> void;
+  auto prepare_exit_with(const char *, bool) -> int;
+  auto setup_environment(bool &, std::string &, size_t &) -> int;
+  auto setup_ssl() -> int;
 }
 
 #endif // MAPLE_HH

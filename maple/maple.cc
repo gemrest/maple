@@ -40,7 +40,9 @@ auto main() -> int {
   const std::string GEMINI_FILE_EXTENSION = "gmi";
 
   // Check if the user is want to support Titan and set it up
-  maple::setup_environment(titan, titan_token, titan_max_size);
+  if (maple::setup_environment(titan, titan_token, titan_max_size) == 1) {
+    return EXIT_FAILURE;
+  }
 
   // Try a graceful shutdown when a SIGINT is detected
   signal(SIGINT, [](int _signal) -> void {
@@ -76,7 +78,7 @@ auto main() -> int {
   }
 
   // Setup SSL
-  maple::setup_ssl();
+  if (maple::setup_ssl() == EXIT_FAILURE) { return EXIT_FAILURE; }
 
   // Listen and serve connections
   for (;;) {
@@ -89,7 +91,9 @@ auto main() -> int {
       &socket_address_length
     );
 
-    if (client < 0) { maple::exit_with("unable to accept", false); }
+    if (client < 0) {
+      return maple::prepare_exit_with("unable to accept", false);
+    }
 
     ssl = SSL_new(maple::ssl_context);
 
@@ -190,19 +194,19 @@ auto main() -> int {
 }
 
 namespace maple {
-  auto exit_with[[noreturn]](const char *message, bool ssl) -> void {
+  auto prepare_exit_with(const char *message, bool ssl) -> int {
     perror(message);
 
     if (ssl) { ERR_print_errors_fp(stderr); }
 
-    std::exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
 
   auto setup_environment(
     bool &titan,
     std::string &titan_token,
     size_t &titan_max_size
-  ) -> void {
+  ) -> int {
     char *titan_environment = std::getenv("TITAN");
 
     if (titan_environment == nullptr) {
@@ -237,7 +241,7 @@ namespace maple {
               std::stoi(unvalidated_titan_max_size)
             );
           } catch (...) {
-            maple::exit_with(
+            return maple::prepare_exit_with(
               "TITAN_MAX_SIZE could not be interpreted as an integer",
               false
             );
@@ -247,9 +251,11 @@ namespace maple {
         titan = true;
       }
     }
+
+    return 0;
   }
 
-  auto setup_ssl() -> void {
+  auto setup_ssl() -> int {
     sockaddr_in socket_address {};
 
     // Setup OpenSSL
@@ -259,7 +265,7 @@ namespace maple {
     maple::ssl_context = SSL_CTX_new(TLS_server_method());
 
     if (!maple::ssl_context) {
-      maple::exit_with("unable to create ssl context", true);
+      return maple::prepare_exit_with("unable to create ssl context", true);
     }
 
     if (SSL_CTX_use_certificate_file(
@@ -267,14 +273,14 @@ namespace maple {
       ".maple/public.pem",
       SSL_FILETYPE_PEM
     ) <= 0) {
-      maple::exit_with("unable to use certificate file", true);
+      return maple::prepare_exit_with("unable to use certificate file", true);
     }
     if (SSL_CTX_use_PrivateKey_file(
       maple::ssl_context,
       ".maple/private.pem",
       SSL_FILETYPE_PEM
     ) <= 0) {
-      maple::exit_with("unable to use private key file", true);
+      return maple::prepare_exit_with("unable to use private key file", true);
     }
 
     socket_address.sin_family = AF_INET;
@@ -284,7 +290,7 @@ namespace maple {
     maple::maple_socket = socket(AF_INET, SOCK_STREAM, 0);
 
     if (maple::maple_socket < 0) {
-      maple::exit_with("unable to create socket", false);
+      return maple::prepare_exit_with("unable to create socket", false);
     }
 
     // Reuse address. Allows the use of the address instantly after a SIGINT
@@ -297,7 +303,7 @@ namespace maple {
       &reuse_addr,
       sizeof(int)
     ) < 0) {
-      maple::exit_with("unable to set socket options (SO_LINGER)", false);
+      return maple::prepare_exit_with("unable to set socket options (SO_LINGER)", false);
     }
 
     if (bind(
@@ -305,10 +311,12 @@ namespace maple {
       reinterpret_cast<sockaddr *>(&socket_address),
       sizeof(socket_address)
     ) < 0) {
-      maple::exit_with("unable to bind", false);
+      return maple::prepare_exit_with("unable to bind", false);
     }
     if (listen(maple::maple_socket, 1) < 0) {
-      maple::exit_with("unable to listen", false);
+      return maple::prepare_exit_with("unable to listen", false);
     }
+
+    return 0;
   }
 }
