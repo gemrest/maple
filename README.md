@@ -76,6 +76,20 @@ field which should be modified is the `ports`, if you have to.
 2. Run: `out/maple`, or
    `TITAN=1 TITAN_TOKEN=secret TITAN_MAX_SIZE=2048 out/maple`
 
+### Hacking
+
+If you decide to tamper with Maple, you should give your commits a test. As
+there isn't a test suite yet, feel free to use any of these examples:
+
+```bash
+# Using OpenSSL directly to debug different requests:
+$ openssl s_client -ign_eof -quiet -connect localhost:1965 <<< \
+> "gemini://localhost:1965"
+
+# Using Bollux to debug proper requests... or any client!
+$ bollux localhost
+```
+
 ## Capsules using Maple
 
 [Add yours!](https://github.com/gemrest/maple/edit/main/README.md)

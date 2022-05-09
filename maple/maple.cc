@@ -56,16 +56,14 @@ auto main() -> int {
     std::string file_extension = entry.path().string().substr(
       entry.path().string().find_last_of('.') + 1
     );
-    std::string gemini_file_extension = "gmi";
 
     // Only keep track of file if it is a Gemini file
     if (std::equal(
       file_extension.begin(),
       file_extension.end(),
-      gemini_file_extension.begin(),
-      gemini_file_extension.end(),
-      [](auto a, auto b) -> bool {return std::tolower(a) == std::tolower(b);
-      }
+      std::string("gmi").begin(),
+      std::string("gmi").end(),
+      [](char a, char b) -> bool { return std::tolower(a) == std::tolower(b); }
     )) {
       gemini_files.push_back(entry.path());
     }
