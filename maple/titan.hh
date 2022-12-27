@@ -21,20 +21,19 @@
 #ifndef TITAN_HH
 #define TITAN_HH
 
+#include <map>
 #include <sstream>
+#include <vector>
 
-namespace maple::titan {
-  /// Convert a `std::vector` of Titan parameters into a key/ value `std::map`
-  auto parameters_to_map(
-    const std::vector<std::string> &
-  ) -> std::map<std::string, std::string>;
+namespace maple {
+namespace titan {
+/// Convert a `std::vector` of Titan parameters into a key/ value `std::map`
+auto parameters_to_map(const std::vector<std::string> &)
+    -> std::map<std::string, std::string>;
 
-  auto handle_client(
-    std::stringstream &,
-    std::string,
-    const std::string &,
-    size_t
-  ) -> void;
-}
+auto handle_client(std::stringstream &, std::string, const std::string &,
+                   size_t) -> void;
+} // namespace titan
+} // namespace maple
 
 #endif // TITAN_HH
