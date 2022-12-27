@@ -11,10 +11,16 @@ rule compile
 rule link
   command = $cc $ldflags $in -o $out
 
+rule clang_format
+  command = clang-format -i -style=LLVM $src_dir/*$cc_ext $src_dir/*.hh
+
 build $out_dir/$name.o:  compile $src_dir/$name.cc
 build $out_dir/gemini.o: compile $src_dir/gemini.cc
 build $out_dir/titan.o:  compile $src_dir/titan.cc
 
 build $out_dir/$name: link $out_dir/$name.o $out_dir/gemini.o $out_dir/titan.o
+
+build _format: clang_format
+build format:  phony _format
 
 default $out_dir/$name
