@@ -24,12 +24,11 @@
 #include <sstream>
 #include <vector>
 
-namespace maple::gemini {
-  auto handle_client(
-    std::vector<std::string>,
-    std::string,
-    std::stringstream &
-  ) -> void;
+namespace maple {
+namespace gemini {
+auto handle_client(std::vector<std::string>, std::string, std::stringstream &)
+    -> void;
 }
+} // namespace maple
 
 #endif // GEMINI_HH
