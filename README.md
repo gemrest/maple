@@ -27,7 +27,7 @@ docker-compose up -d
 ### Docker
 
 ```shell
-docker run fuwn/maple:latest
+docker run -p 1965:1965 -v ./your_capsules_directory:/maple/.maple fuwn/maple:latest
 ```
 
 ### Executable
