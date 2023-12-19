@@ -15,6 +15,27 @@ has Gemini support.
 
 ## Usage
 
+### Docker Compose
+
+A Docker Compose file is already setup [here](./docker-compose.yaml). The only
+field which should be modified is the `ports`, if need be.
+
+```shell
+docker-compose up -d
+```
+
+### Docker
+
+```shell
+docker run fuwn/maple:latest
+```
+
+### Executable
+
+1. Build: `ninja` (requires [Ninja](https://ninja-build.org/))
+2. Run: `out/maple`, or
+   `TITAN=1 TITAN_TOKEN=secret TITAN_MAX_SIZE=2048 out/maple`
+
 ### Certificates
 
 Before any possible method of usage; you must generate or use a preexisting
@@ -61,20 +82,6 @@ The maximum size in bytes which a Titan upload is permitted to perform.
 Takes an integer.
 
 Default to `1024`.
-
-### Docker Compose
-
-A Docker Compose file is already setup [here](./docker-compose.yaml). The only
-field which should be modified is the `ports`, if you have to.
-
-`$ docker-compose up -d` (requires [Docker](https://www.docker.com/) and/ or
-[Docker Compose](https://docs.docker.com/compose/))
-
-### Executable
-
-1. Build: `ninja` (requires [Ninja](https://ninja-build.org/))
-2. Run: `out/maple`, or
-   `TITAN=1 TITAN_TOKEN=secret TITAN_MAX_SIZE=2048 out/maple`
 
 ### Hacking
 
