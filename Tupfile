@@ -8,15 +8,15 @@ BUILD_DIRECTORY = build
 # Compiler Configuration
 CXX = clang++
 CXX_EXTENSION = cc
-CXX_FLAGS = -std=c++23 -I $(INCLUDE_DIRECTORY) -Weverything -Wno-padded -Wno-c++98-compat -MMD -fno-diagnostics-show-note-include-stack -Wno-c++98-compat-pedantic
+CXX_FLAGS = -std=c++23 -I $(INCLUDE_DIRECTORY) -Weverything -Wno-padded -Wno-c++98-compat -MMD -Wno-c++98-compat-pedantic
 LD_FLAGS = -lssl -lcrypto
 
 # Clang-Tidy Configuration
-CLANG_TIDY_CHECKS = '-*,bugprone-*,clang-analyzer-*,concurrency-*,cppcoreguildelines-*,llvm-*,misc-*,modernize-*,performance-*,portability-*,readability-*,-readability-magic-numbers,-llvm-header-guard,-bugprone-suspicious-include,-readability-function-cognitive-complexity,-bugprone-exception-escape'
+CLANG_TIDY_CHECKS = '-*,bugprone-*,clang-analyzer-*,concurrency-*,cppcoreguildelines-*,llvm-*,misc-*,modernize-*,performance-*,portability-*,readability-*,-readability-function-cognitive-complexity,-bugprone-easily-swappable-parameters,-concurrency-mt-unsafe'
 CLANG_TIDY_FLAGS = -checks=$(CLANG_TIDY_CHECKS) -warnings-as-errors=* -quiet
 
 # : foreach $(SOURCE_DIRECTORY)/*.$(CXX_EXTENSION) $(INCLUDE_DIRECTORY)/*.hh |> clang-format -i -style=LLVM %f |>
-# : foreach $(SOURCE_DIRECTORY)/*.$(CXX_EXTENSION) |> clang-tidy $(CLANG_TIDY_FLAGS) %f  -- $(CXX_FLAGS) |>
+: foreach $(SOURCE_DIRECTORY)/*.$(CXX_EXTENSION) |> clang-tidy $(CLANG_TIDY_FLAGS) %f  -- $(CXX_FLAGS) |>
 : foreach $(SOURCE_DIRECTORY)/*.$(CXX_EXTENSION) |> ^j^ $(CXX) $(CXX_FLAGS) -MF $(BUILD_DIRECTORY)/%B.d -c %f -o %o |> $(BUILD_DIRECTORY)/%B.o | $(BUILD_DIRECTORY)/%B.d
 : $(BUILD_DIRECTORY)/*.o |> $(CXX) $(LD_FLAGS) %f -o %o |> $(BUILD_DIRECTORY)/$(NAME)
 
