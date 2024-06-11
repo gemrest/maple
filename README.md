@@ -3,6 +3,7 @@
 A very simple static Gemini server, now with Titan support!
 
 ### Lines-of-code
+
 This codebase is now 351 lines of lines-of-code!
 
 The statement "... written within a single file and liberally
@@ -32,9 +33,9 @@ docker run -p 1965:1965 -v ./your_capsules_directory:/maple/.maple fuwn/maple:la
 
 ### Executable
 
-1. Build: `ninja` (requires [Ninja](https://ninja-build.org/))
-2. Run: `out/maple`, or
-   `TITAN=1 TITAN_TOKEN=secret TITAN_MAX_SIZE=2048 out/maple`
+1. Build: `tup` (requires [Tup](https://gittup.org/tup/index.html))
+2. Run: `build/maple`, or
+   `TITAN=1 TITAN_TOKEN=secret TITAN_MAX_SIZE=2048 build/maple`
 
 ### Certificates
 

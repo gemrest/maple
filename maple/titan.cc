@@ -39,15 +39,15 @@ auto parameters_to_map(const std::vector<std::string> &parameters)
     parameter.erase(0, parameter_delimiter_position + 1);
 
     // Add the key and value to `parameters_map`
-    parameters_map[key] = parameter;
+    parameters_map.at(key) = parameter;
   }
 
   return parameters_map;
 }
 
 auto handle_client(std::stringstream &response, std::string path,
-                   const std::string &titan_token, size_t titan_max_size)
-    -> void {
+                   const std::string &titan_token,
+                   size_t titan_max_size) -> void {
   std::vector<std::string> parameters;
   // Find path in `path`
   size_t delimiter_position = path.find(';');
@@ -121,7 +121,8 @@ auto handle_client(std::stringstream &response, std::string path,
     }
 
     try {
-      size_t body_size = static_cast<size_t>(std::stoi(parameters_map["size"]));
+      size_t body_size =
+          static_cast<size_t>(std::stoi(parameters_map.at("size")));
 
       if (body_size > titan_max_size) {
         response << "20 text/gemini\r\nThe server (Maple) received a body "
@@ -141,7 +142,7 @@ auto handle_client(std::stringstream &response, std::string path,
       update_path = "/index.gmi";
     }
 
-    if (parameters_map["token"] == titan_token) {
+    if (parameters_map.at("token") == titan_token) {
       std::ofstream file(".maple/gmi" + update_path);
 
       file << body;
