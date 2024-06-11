@@ -1,0 +1,20 @@
+cc       = clang++
+cxxflags = -std=c++23 -Weverything -Wno-padded -Wno-c++98-compat -MMD -Wno-c++98-compat-pedantic
+ldflags  = -lssl -lcrypto
+outdir   = build
+name     = maple
+srcdir   = $name
+
+rule compile
+  command = $cc $cxxflags -c $in -o $out
+
+rule link
+  command = $cc $in -o $out $ldflags
+
+build $outdir/$name.o:  compile $srcdir/$name.cc
+build $outdir/gemini.o: compile $srcdir/gemini.cc
+build $outdir/titan.o:  compile $srcdir/titan.cc
+
+build $outdir/$name: link $outdir/$name.o $outdir/gemini.o $outdir/titan.o
+
+default $outdir/$name

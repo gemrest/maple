@@ -1,13 +1,6 @@
-# Development
-*.pem
-out/
+# Ignore everything
+**
 
-# CMake
-cmake-build-*/
-CMakeLists.txt
+!maple
+!build.ninja
 
-# Ninja
-.ninja_*
-
-# IDE
-.idea/
