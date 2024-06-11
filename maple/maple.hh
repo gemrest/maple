@@ -29,7 +29,7 @@ static int maple_socket;
 static SSL_CTX *ssl_context;
 
 auto prepare_exit_with(const char *, bool) -> int;
-auto setup_environment(bool &, std::string &, size_t &) -> int;
+auto setup_environment(bool &, std::string &, std::size_t &) -> int;
 auto setup_ssl() -> int;
 } // namespace maple
 

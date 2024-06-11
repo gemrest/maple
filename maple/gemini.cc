@@ -18,13 +18,16 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 #include "gemini.hh"
 
-namespace maple {
-namespace gemini {
+namespace maple::gemini {
 auto handle_client(std::vector<std::string> gemini_files, std::string path,
                    std::stringstream &response) -> void {
   // Check if the route is a file being served
@@ -43,7 +46,6 @@ auto handle_client(std::vector<std::string> gemini_files, std::string path,
     }
   }
 
-  std::cout << "requested " << path << std::endl;
+  std::cout << "requested " << path << '\n';
 }
-} // namespace gemini
-} // namespace maple
+} // namespace maple::gemini

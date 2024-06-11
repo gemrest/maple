@@ -32,7 +32,7 @@ auto parameters_to_map(const std::vector<std::string> &)
     -> std::map<std::string, std::string>;
 
 auto handle_client(std::stringstream &, std::string, const std::string &,
-                   size_t) -> void;
+                   std::size_t) -> void;
 } // namespace titan
 } // namespace maple
 

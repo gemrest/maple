@@ -18,12 +18,21 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-#include <arpa/inet.h>
+#include <algorithm>
+#include <array>
+#include <asm-generic/socket.h>
+#include <cctype>
 #include <csignal>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
-#include <map>
+#include <netinet/in.h>
 #include <openssl/err.h>
+#include <openssl/ssl.h>
+#include <sstream>
+#include <string>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <vector>
@@ -36,7 +45,7 @@ auto main() -> int {
   std::vector<std::string> gemini_files;
   bool titan = false;
   std::string titan_token;
-  size_t titan_max_size = 0;
+  std::size_t titan_max_size = 0;
   const std::string GEMINI_FILE_EXTENSION = "gmi";
 
   // Check if the user is want to support Titan and set it up
@@ -46,7 +55,7 @@ auto main() -> int {
 
   // Try a graceful shutdown when a SIGINT is detected
   signal(SIGINT, [](int _signal) -> void {
-    std::cout << "shutdown(" << _signal << ")" << std::endl;
+    std::cout << "shutdown(" << _signal << ")\n";
 
     close(maple::maple_socket);
     SSL_CTX_free(maple::ssl_context);
@@ -61,8 +70,9 @@ auto main() -> int {
     // Only keep track of file if it is a Gemini file
     if (std::equal(file_extension.begin(), file_extension.end(),
                    GEMINI_FILE_EXTENSION.begin(), GEMINI_FILE_EXTENSION.end(),
-                   [](char a, char b) -> bool {
-                     return std::tolower(a) == std::tolower(b);
+                   [](char character_a, char character_b) -> bool {
+                     return std::tolower(character_a) ==
+                            std::tolower(character_b);
                    })) {
       gemini_files.push_back(entry.path());
     }
@@ -70,7 +80,7 @@ auto main() -> int {
 
   // Inform user of which files will be served
   for (const std::string &file : gemini_files) {
-    std::cout << "serving " << file << std::endl;
+    std::cout << "serving " << file << '\n';
   }
 
   // Setup SSL
@@ -83,9 +93,9 @@ auto main() -> int {
     sockaddr_in socket_address_{};
     unsigned int socket_address_length = sizeof(socket_address_);
     SSL *ssl;
-    int client = accept(maple::maple_socket,
-                        reinterpret_cast<sockaddr *>(&socket_address_),
-                        &socket_address_length);
+    const int client = accept(maple::maple_socket,
+                              reinterpret_cast<sockaddr *>(&socket_address_),
+                              &socket_address_length);
 
     if (client < 0) {
       return maple::prepare_exit_with("unable to accept", false);
@@ -99,14 +109,15 @@ auto main() -> int {
       ERR_print_errors_fp(stderr);
     } else {
       std::stringstream response;
-      size_t index_of_junk;
+      std::size_t index_of_junk;
       int request_scheme; // Gemini = 1, Titan = 2, Error = 0
-      size_t bytes_read;
-      char request[1024]{};
+      std::size_t bytes_read;
+      constexpr std::size_t GEMINI_MAXIMUM_REQUEST_SIZE = 1024;
+      std::array<char, GEMINI_MAXIMUM_REQUEST_SIZE> request{};
 
-      SSL_read_ex(ssl, request, sizeof(request), &bytes_read);
+      SSL_read_ex(ssl, request.begin(), request.size(), &bytes_read);
 
-      std::string path(request);
+      std::string path(request.data());
 
       if (path.starts_with("gemini://")) {
         request_scheme = 1;
@@ -125,14 +136,18 @@ auto main() -> int {
         }
 
         if (request_scheme == 1) {
-          path.erase(0, 9); // Remove "gemini://"
+          constexpr std::size_t GEMINI_PROTOCOL_LENGTH = 9;
+
+          path.erase(0, GEMINI_PROTOCOL_LENGTH); // Remove "gemini://"
         } else {
-          path.erase(0, 8); // Remove "titan://"
+          constexpr std::size_t TITAN_PROTOCOL_LENGTH = 8;
+
+          path.erase(0, TITAN_PROTOCOL_LENGTH); // Remove "titan://"
         }
 
         // Try to remove the host, if you cannot; it must be a trailing
         // slash-less hostname, so we will respond with the index.
-        size_t found_first = path.find_first_of('/');
+        const std::size_t found_first = path.find_first_of('/');
 
         if (found_first != std::string::npos) {
           path = path.substr(found_first,
@@ -166,8 +181,7 @@ auto main() -> int {
         SSL_write(ssl, response.str().c_str(),
                   static_cast<int>(response.str().size()));
       } else {
-        std::cout << "received a request with an unsupported url scheme"
-                  << std::endl;
+        std::cout << "received a request with an unsupported url scheme\n";
       }
     }
 
@@ -189,7 +203,7 @@ auto prepare_exit_with(const char *message, bool ssl) -> int {
 }
 
 auto setup_environment(bool &titan, std::string &titan_token,
-                       size_t &titan_max_size) -> int {
+                       std::size_t &titan_max_size) -> int {
   char *titan_environment = std::getenv("TITAN");
 
   if (titan_environment == nullptr) {
@@ -197,10 +211,10 @@ auto setup_environment(bool &titan, std::string &titan_token,
   } else {
     std::string valid_titan_environment(titan_environment);
 
-    std::transform(valid_titan_environment.begin(),
-                   valid_titan_environment.end(),
-                   valid_titan_environment.begin(),
-                   [](unsigned char c) -> int { return std::tolower(c); });
+    std::transform(
+        valid_titan_environment.begin(), valid_titan_environment.end(),
+        valid_titan_environment.begin(),
+        [](unsigned char character) -> int { return std::tolower(character); });
 
     if (valid_titan_environment == "true" || valid_titan_environment == "1") {
       char *unvalidated_titan_token = std::getenv("TITAN_TOKEN");
@@ -213,13 +227,15 @@ auto setup_environment(bool &titan, std::string &titan_token,
       }
 
       if (unvalidated_titan_max_size == nullptr) {
-        titan_max_size = 1024;
+        constexpr std::size_t TITAN_MAX_SIZE = 1024;
 
-        std::cout << "no TITAN_MAX_SIZE set, defaulting to 1024" << std::endl;
+        titan_max_size = TITAN_MAX_SIZE;
+
+        std::cout << "no TITAN_MAX_SIZE set, defaulting to 1024\n";
       } else {
         try {
           titan_max_size =
-              static_cast<size_t>(std::stoi(unvalidated_titan_max_size));
+              static_cast<std::size_t>(std::stoi(unvalidated_titan_max_size));
         } catch (...) {
           return maple::prepare_exit_with(
               "TITAN_MAX_SIZE could not be interpreted as an integer", false);
@@ -242,7 +258,7 @@ auto setup_ssl() -> int {
 
   maple::ssl_context = SSL_CTX_new(TLS_server_method());
 
-  if (!maple::ssl_context) {
+  if (maple::ssl_context == nullptr) {
     return maple::prepare_exit_with("unable to create ssl context", true);
   }
 
@@ -256,8 +272,10 @@ auto setup_ssl() -> int {
     return maple::prepare_exit_with("unable to use private key file", true);
   }
 
+  constexpr std::size_t GEMINI_PORT = 1965;
+
   socket_address.sin_family = AF_INET;
-  socket_address.sin_port = htons(1965);
+  socket_address.sin_port = htons(GEMINI_PORT);
   socket_address.sin_addr.s_addr = htonl(INADDR_ANY);
 
   maple::maple_socket = socket(AF_INET, SOCK_STREAM, 0);

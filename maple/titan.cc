@@ -18,22 +18,24 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
+#include <cstddef>
 #include <fstream>
 #include <map>
+#include <sstream>
+#include <string>
 #include <vector>
 
 #include "titan.hh"
 
-namespace maple {
-namespace titan {
+namespace maple::titan {
 auto parameters_to_map(const std::vector<std::string> &parameters)
     -> std::map<std::string, std::string> {
   std::map<std::string, std::string> parameters_map;
 
   for (auto parameter : parameters) {
     // Find the key in `parameter`
-    size_t parameter_delimiter_position = parameter.find('=');
-    std::string key = parameter.substr(0, parameter_delimiter_position);
+    const std::size_t parameter_delimiter_position = parameter.find('=');
+    const std::string key = parameter.substr(0, parameter_delimiter_position);
 
     // Remove the key in `parameter`
     parameter.erase(0, parameter_delimiter_position + 1);
@@ -47,12 +49,12 @@ auto parameters_to_map(const std::vector<std::string> &parameters)
 
 auto handle_client(std::stringstream &response, std::string path,
                    const std::string &titan_token,
-                   size_t titan_max_size) -> void {
+                   std::size_t titan_max_size) -> void {
   std::vector<std::string> parameters;
   // Find path in `path`
-  size_t delimiter_position = path.find(';');
+  std::size_t delimiter_position = path.find(';');
   std::string update_path = path.substr(0, delimiter_position);
-  std::string body = path.substr(path.find('\n') + 1, path.length() - 1);
+  const std::string body = path.substr(path.find('\n') + 1, path.length() - 1);
 
   path.erase(path.find('\n') - 1, path.length() - 1);
   // parameters.push_back(update_path);
@@ -121,8 +123,8 @@ auto handle_client(std::stringstream &response, std::string path,
     }
 
     try {
-      size_t body_size =
-          static_cast<size_t>(std::stoi(parameters_map.at("size")));
+      const std::size_t body_size =
+          static_cast<std::size_t>(std::stoi(parameters_map.at("size")));
 
       if (body_size > titan_max_size) {
         response << "20 text/gemini\r\nThe server (Maple) received a body "
@@ -157,5 +159,4 @@ auto handle_client(std::stringstream &response, std::string path,
     break;
   }
 }
-} // namespace titan
-} // namespace maple
+} // namespace maple::titan
