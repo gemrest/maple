@@ -3,8 +3,9 @@
 }:
 pkgs.mkShell {
   buildInputs = with pkgs; [
-    libressl
+    libressl_3_9
     ninja
-    clang
+    clang_19
+    (llvmPackages_19.clang-tools.override { enableLibcxx = true; })
   ];
 }
