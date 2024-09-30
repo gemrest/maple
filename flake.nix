@@ -37,31 +37,33 @@
           platforms = platforms.linux;
         };
 
-        maple = (pkgs.stdenvAdapters.useMoldLinker pkgs.clangStdenv).mkDerivation {
-          inherit meta;
+        maple =
+          with pkgs;
+          (stdenvAdapters.useMoldLinker clangStdenvNoLibs).mkDerivation {
+            inherit meta;
 
-          name = "maple";
-          version = "0.1.6";
-          src = pkgs.lib.cleanSource ./.;
+            name = "maple";
+            version = "0.1.6";
+            src = lib.cleanSource ./.;
 
-          nativeBuildInputs = with pkgs; [
-            ninja
-            clang
-          ];
+            nativeBuildInputs = [
+              ninja
+              clang
+            ];
 
-          buildInputs = [
-            pkgs.libressl.dev
-          ];
+            buildInputs = [
+              libressl.dev
+            ];
 
-          buildPhase = ''
-            mkdir -p $out/bin
-            ninja
-          '';
+            buildPhase = ''
+              mkdir -p $out/bin
+              ninja
+            '';
 
-          installPhase = ''
-            cp build/maple $out/bin/maple
-          '';
-        };
+            installPhase = ''
+              cp build/maple $out/bin/maple
+            '';
+          };
       in
       {
         packages = {
