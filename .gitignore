@@ -14,3 +14,5 @@ build
 # Ninja
 .ninja_log
 
+# Nix
+result
