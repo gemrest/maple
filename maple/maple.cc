@@ -20,7 +20,6 @@
 
 #include <algorithm>
 #include <array>
-#include <asm-generic/socket.h>
 #include <cctype>
 #include <csignal>
 #include <cstddef>
@@ -36,6 +35,10 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <vector>
+
+#if !defined(__APPLE__)
+#include <asm-generic/socket.h>
+#endif
 
 #include "gemini.hh"
 #include "maple.hh"

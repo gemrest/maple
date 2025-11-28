@@ -34,36 +34,42 @@
           license = licenses.gpl3Only;
           maintainers = [ maintainers.Fuwn ];
           mainPackage = "maple";
-          platforms = platforms.linux;
+          platforms = platforms.unix;
         };
 
         maple =
           with pkgs;
-          (stdenvAdapters.useMoldLinker clangStdenvNoLibs).mkDerivation {
-            inherit meta;
+          (
+            if pkgs.stdenv.isDarwin then
+              pkgs.clangStdenvNoLibs
+            else
+              pkgs.stdenvAdapters.useMoldLinker pkgs.clangStdenvNoLibs
+          ).mkDerivation
+            {
+              inherit meta;
 
-            name = "maple";
-            version = "0.1.6";
-            src = lib.cleanSource ./.;
+              name = "maple";
+              version = "0.1.6";
+              src = lib.cleanSource ./.;
 
-            nativeBuildInputs = [
-              ninja
-              clang
-            ];
+              nativeBuildInputs = [
+                ninja
+                clang
+              ];
 
-            buildInputs = [
-              libressl.dev
-            ];
+              buildInputs = [
+                libressl.dev
+              ];
 
-            buildPhase = ''
-              mkdir -p $out/bin
-              ninja
-            '';
+              buildPhase = ''
+                mkdir -p $out/bin
+                ninja
+              '';
 
-            installPhase = ''
-              cp build/maple $out/bin/maple
-            '';
-          };
+              installPhase = ''
+                cp build/maple $out/bin/maple
+              '';
+            };
       in
       {
         packages = {

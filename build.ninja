@@ -1,5 +1,5 @@
 cc       = clang++
-cxxflags = -std=c++23 -Weverything -Wno-padded -Wno-c++98-compat -MMD -Wno-c++98-compat-pedantic
+cxxflags = -std=c++20 -Weverything -Wno-padded -Wno-c++98-compat -MMD -Wno-c++98-compat-pedantic
 ldflags  = -lssl -lcrypto
 outdir   = build
 name     = maple
