@@ -32,24 +32,28 @@ auto parameters_to_map(const std::vector<std::string> &parameters)
     -> std::map<std::string, std::string> {
   std::map<std::string, std::string> parameters_map;
 
-  for (auto parameter : parameters) {
+  for (const auto &parameter : parameters) {
     // Find the key in `parameter`
     const std::size_t parameter_delimiter_position = parameter.find('=');
-    const std::string key = parameter.substr(0, parameter_delimiter_position);
 
-    // Remove the key in `parameter`
-    parameter.erase(0, parameter_delimiter_position + 1);
+    if (parameter_delimiter_position == std::string::npos) {
+      continue;
+    }
+
+    const std::string key = parameter.substr(0, parameter_delimiter_position);
+    const std::string value =
+        parameter.substr(parameter_delimiter_position + 1);
 
     // Add the key and value to `parameters_map`
-    parameters_map.at(key) = parameter;
+    parameters_map.emplace(key, value);
   }
 
   return parameters_map;
 }
 
 auto handle_client(std::stringstream &response, std::string path,
-                   const std::string &titan_token,
-                   std::size_t titan_max_size) -> void {
+                   const std::string &titan_token, std::size_t titan_max_size)
+    -> void {
   std::vector<std::string> parameters;
   // Find path in `path`
   std::size_t delimiter_position = path.find(';');
@@ -144,7 +148,11 @@ auto handle_client(std::stringstream &response, std::string path,
       update_path = "/index.gmi";
     }
 
-    if (parameters_map.at("token") == titan_token) {
+    const auto token_iterator = parameters_map.find("token");
+    const std::string token =
+        token_iterator == parameters_map.end() ? "" : token_iterator->second;
+
+    if (token == titan_token) {
       std::ofstream file(".maple/gmi" + update_path);
 
       file << body;

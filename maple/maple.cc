@@ -119,8 +119,7 @@ auto main() -> int {
       std::array<char, GEMINI_MAXIMUM_REQUEST_SIZE> request{};
 
       SSL_read_ex(ssl, request.begin(), request.size(), &bytes_read);
-
-      std::string path(request.data());
+      std::string path(request.data(), bytes_read);
 
       if (path.starts_with("gemini://")) {
         request_scheme = 1;
@@ -131,11 +130,9 @@ auto main() -> int {
       }
 
       if (request_scheme != 0) {
-        path = path.substr(0, bytes_read);
-
         // Remove "\r\n" if Gemini
         if (request_scheme == 1) {
-          path = path.substr(0, path.size() - 2);
+          path.resize(path.size() - 2);
         }
 
         if (request_scheme == 1) {
@@ -181,8 +178,10 @@ auto main() -> int {
           }
         }
 
-        SSL_write(ssl, response.str().c_str(),
-                  static_cast<int>(response.str().size()));
+        const std::string response_string = response.str();
+
+        SSL_write(ssl, response_string.c_str(),
+                  static_cast<int>(response_string.size()));
       } else {
         std::cout << "received a request with an unsupported url scheme\n";
       }

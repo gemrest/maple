@@ -28,8 +28,8 @@
 #include "gemini.hh"
 
 namespace maple::gemini {
-auto handle_client(std::vector<std::string> gemini_files, std::string path,
-                   std::stringstream &response) -> void {
+auto handle_client(const std::vector<std::string> &gemini_files,
+                   std::string path, std::stringstream &response) -> void {
   // Check if the route is a file being served
   if (std::find(gemini_files.begin(), gemini_files.end(),
                 ".maple/gmi" + path) != gemini_files.end()) {

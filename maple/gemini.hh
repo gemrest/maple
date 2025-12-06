@@ -26,8 +26,8 @@
 
 namespace maple {
 namespace gemini {
-auto handle_client(std::vector<std::string>, std::string, std::stringstream &)
-    -> void;
+auto handle_client(const std::vector<std::string> &, std::string,
+                   std::stringstream &) -> void;
 }
 } // namespace maple
 
