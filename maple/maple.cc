@@ -63,6 +63,7 @@ auto main() -> int {
     close(maple::maple_socket);
     SSL_CTX_free(maple::ssl_context);
   });
+  signal(SIGPIPE, SIG_IGN);
 
   // Find and keep track of all Gemini files to serve
   for (const std::filesystem::directory_entry &entry :
@@ -114,76 +115,96 @@ auto main() -> int {
       std::stringstream response;
       std::size_t index_of_junk;
       int request_scheme; // Gemini = 1, Titan = 2, Error = 0
-      std::size_t bytes_read;
+      std::size_t bytes_read = 0;
       constexpr std::size_t GEMINI_MAXIMUM_REQUEST_SIZE = 1024;
       std::array<char, GEMINI_MAXIMUM_REQUEST_SIZE> request{};
+      const int read_result =
+          SSL_read_ex(ssl, request.begin(), request.size(), &bytes_read);
 
-      SSL_read_ex(ssl, request.begin(), request.size(), &bytes_read);
-      std::string path(request.data(), bytes_read);
+      if (read_result > 0 && bytes_read > 0) {
+        std::string path(request.data(), bytes_read);
 
-      if (path.starts_with("gemini://")) {
-        request_scheme = 1;
-      } else if (path.starts_with("titan://")) {
-        request_scheme = 2;
-      } else {
-        request_scheme = 0;
-      }
-
-      if (request_scheme != 0) {
-        // Remove "\r\n" if Gemini
-        if (request_scheme == 1) {
-          path.resize(path.size() - 2);
-        }
-
-        if (request_scheme == 1) {
-          constexpr std::size_t GEMINI_PROTOCOL_LENGTH = 9;
-
-          path.erase(0, GEMINI_PROTOCOL_LENGTH); // Remove "gemini://"
+        if (path.starts_with("gemini://")) {
+          request_scheme = 1;
+        } else if (path.starts_with("titan://")) {
+          request_scheme = 2;
         } else {
-          constexpr std::size_t TITAN_PROTOCOL_LENGTH = 8;
-
-          path.erase(0, TITAN_PROTOCOL_LENGTH); // Remove "titan://"
+          request_scheme = 0;
         }
 
-        // Try to remove the host, if you cannot; it must be a trailing
-        // slash-less hostname, so we will respond with the index.
-        const std::size_t found_first = path.find_first_of('/');
+        if (request_scheme != 0) {
+          bool request_valid = true;
 
-        if (found_first != std::string::npos) {
-          path = path.substr(found_first,
-                             path.size() - 1); // Remove host
+          // Remove "\r\n" if Gemini
+          if (request_scheme == 1) {
+            if (path.size() < 2) {
+              std::cout << "received malformed gemini request\n";
+
+              request_valid = false;
+            } else {
+              path.resize(path.size() - 2);
+            }
+          }
+
+          if (request_valid) {
+            if (request_scheme == 1) {
+              constexpr std::size_t GEMINI_PROTOCOL_LENGTH = 9;
+
+              path.erase(0, GEMINI_PROTOCOL_LENGTH); // Remove "gemini://"
+            } else {
+              constexpr std::size_t TITAN_PROTOCOL_LENGTH = 8;
+
+              path.erase(0, TITAN_PROTOCOL_LENGTH); // Remove "titan://"
+            }
+
+            // Try to remove the host, if you cannot; it must be a trailing
+            // slash-less hostname, so we will respond with the index.
+            const std::size_t found_first = path.find_first_of('/');
+
+            if (found_first != std::string::npos) {
+              path = path.substr(found_first,
+                                 path.size() - 1); // Remove host
+            } else {
+              path = "/index.gmi";
+            }
+
+            if (request_scheme == 1) {
+              // Remove junk, if any
+              index_of_junk = path.find_first_of('\n');
+
+              if (index_of_junk != std::string::npos) {
+                path.erase(path.find_first_of('\n') - 1, path.size() - 1);
+              }
+            }
+
+            // Gemini
+            if (request_scheme == 1) {
+              maple::gemini::handle_client(gemini_files, path, response);
+            } else { // Titan
+              if (!titan) {
+                response
+                    << "20 text/gemini\r\nThe server (Maple) does not have "
+                       "Titan support enabled!";
+              } else {
+                maple::titan::handle_client(response, path, titan_token,
+                                            titan_max_size);
+              }
+            }
+
+            const std::string response_string = response.str();
+            const int bytes_written =
+                SSL_write(ssl, response_string.c_str(),
+                          static_cast<int>(response_string.size()));
+
+            if (bytes_written <= 0) {
+              ERR_print_errors_fp(stderr);
+            }
+          }
         } else {
-          path = "/index.gmi";
+          std::cout << "received a request with an unsupported url scheme\n";
         }
-
-        if (request_scheme == 1) {
-          // Remove junk, if any
-          index_of_junk = path.find_first_of('\n');
-
-          if (index_of_junk != std::string::npos) {
-            path.erase(path.find_first_of('\n') - 1, path.size() - 1);
-          }
-        }
-
-        // Gemini
-        if (request_scheme == 1) {
-          maple::gemini::handle_client(gemini_files, path, response);
-        } else { // Titan
-          if (!titan) {
-            response << "20 text/gemini\r\nThe server (Maple) does not have "
-                        "Titan support enabled!";
-          } else {
-            maple::titan::handle_client(response, path, titan_token,
-                                        titan_max_size);
-          }
-        }
-
-        const std::string response_string = response.str();
-
-        SSL_write(ssl, response_string.c_str(),
-                  static_cast<int>(response_string.size()));
       } else {
-        std::cout << "received a request with an unsupported url scheme\n";
+        ERR_print_errors_fp(stderr);
       }
     }
 
