@@ -177,7 +177,6 @@ class ServerTests(unittest.TestCase):
         self.start()
         self.assertTrue(self.request(b'gemini://localhost/missing/\r\n').startswith(b'51'))
 
-    @unittest.expectedFailure
     def test_malformed_titan_keeps_server_alive(self):
         self.start()
 
@@ -189,7 +188,6 @@ class ServerTests(unittest.TestCase):
         self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'ORIGINAL')
         self.assertTrue(self.request(b'gemini://localhost/\r\n').startswith(b'20'))
 
-    @unittest.expectedFailure
     def test_strict_upload_size(self):
         self.start(TITAN_MAX_SIZE='4')
 
@@ -200,7 +198,6 @@ class ServerTests(unittest.TestCase):
                 self.assertTrue(response.startswith(b'59'))
                 self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'ORIGINAL')
 
-    @unittest.expectedFailure
     def test_negative_configured_size(self):
         environment = {**os.environ, 'TITAN': '1', 'TITAN_MAX_SIZE': '-1'}
         result = subprocess.run([str(self.binary)], cwd=self.directory, env=environment,
@@ -220,7 +217,6 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(response.startswith(b'20'))
         self.assertEqual((self.content / 'new.gmi').read_bytes(), b'DATA')
 
-    @unittest.expectedFailure
     def test_incomplete_upload_preserves_file(self):
         self.start()
 
@@ -239,7 +235,6 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(self.upload('/large.gmi', body).startswith(b'20'))
         self.assertEqual((self.content / 'large.gmi').read_bytes(), body)
 
-    @unittest.expectedFailure
     def test_wrong_token(self):
         self.start(TITAN_TOKEN='expected')
         self.assertTrue(self.upload('/existing.gmi', b'BAD', token='wrong').startswith(b'59'))

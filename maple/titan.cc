@@ -18,158 +18,104 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-#include <cstddef>
-#include <fstream>
-#include <map>
-#include <sstream>
-#include <string>
-#include <vector>
 #include "titan.hh"
 #include "content.hh"
+#include "size.hh"
 
 namespace maple::titan {
-auto parameters_to_map(const std::vector<std::string> &parameters)
-    -> std::map<std::string, std::string> {
-  std::map<std::string, std::string> parameters_map;
+auto parse_upload(std::string_view header, std::string_view token,
+                  std::size_t maximum_upload_bytes) -> std::optional<Upload> {
+  const std::size_t separator_offset_bytes = header.find(';');
 
-  for (const auto &parameter : parameters) {
-    // Find the key in `parameter`
-    const std::size_t parameter_delimiter_position = parameter.find('=');
-
-    if (parameter_delimiter_position == std::string::npos) {
-      continue;
-    }
-
-    const std::string key = parameter.substr(0, parameter_delimiter_position);
-    const std::string value =
-        parameter.substr(parameter_delimiter_position + 1);
-
-    // Add the key and value to `parameters_map`
-    parameters_map.emplace(key, value);
+  if (separator_offset_bytes == std::string_view::npos ||
+      separator_offset_bytes == 0) {
+    return std::nullopt;
   }
 
-  return parameters_map;
+  const std::string path(header.substr(0, separator_offset_bytes));
+  std::optional<std::size_t> size_bytes;
+  std::optional<std::string_view> mime;
+  std::optional<std::string_view> supplied_token;
+
+  header.remove_prefix(separator_offset_bytes + 1);
+
+  while (!header.empty()) {
+    const std::size_t next_parameter_offset_bytes = header.find(';');
+    const std::string_view parameter =
+        header.substr(0, next_parameter_offset_bytes);
+    const std::size_t value_separator_offset_bytes = parameter.find('=');
+
+    if (value_separator_offset_bytes == std::string_view::npos) {
+      return std::nullopt;
+    }
+
+    const std::string_view key =
+        parameter.substr(0, value_separator_offset_bytes);
+    const std::string_view value =
+        parameter.substr(value_separator_offset_bytes + 1);
+
+    if (key == "size" && !size_bytes) {
+      size_bytes = parse_size(value);
+
+      if (!size_bytes || *size_bytes > maximum_upload_bytes) {
+        return std::nullopt;
+      }
+    } else if (key == "mime" && !mime) {
+      mime = value;
+    } else if (key == "token" && !supplied_token) {
+      supplied_token = value;
+    } else {
+      return std::nullopt;
+    }
+
+    if (next_parameter_offset_bytes == std::string_view::npos) {
+      break;
+    }
+
+    header.remove_prefix(next_parameter_offset_bytes + 1);
+
+    if (header.empty()) {
+      return std::nullopt;
+    }
+  }
+
+  if (!size_bytes || !mime || *mime != "text/gemini" ||
+      supplied_token.value_or("") != token) {
+    return std::nullopt;
+  }
+
+  return Upload{path, *size_bytes};
 }
 
-auto handle_client(std::stringstream &response, std::string path,
-                   const std::string &titan_token, std::size_t titan_max_size)
+auto handle_client(std::stringstream &response, std::string_view request,
+                   std::string_view token, std::size_t maximum_upload_bytes)
     -> void {
-  std::vector<std::string> parameters;
+  constexpr std::size_t header_terminator_bytes = 2;
+  const std::size_t header_end_bytes = request.find("\r\n");
 
-  // Find path in `path`
-  std::size_t delimiter_position = path.find(';');
-  std::string update_path = path.substr(0, delimiter_position);
-  const std::string body = path.substr(path.find('\n') + 1, path.length() - 1);
+  if (header_end_bytes == std::string_view::npos) {
+    response << "59 Incomplete Titan header.\r\n";
 
-  path.erase(path.find('\n') - 1, path.length() - 1);
-
-  // parameters.push_back(update_path);
-  path.erase(0, delimiter_position + 1); // Remove path from `path`
-
-  // Find mime parameter in `path`
-  delimiter_position = path.find(';');
-
-  parameters.push_back(path.substr(0, delimiter_position));
-  path.erase(0, delimiter_position + 1); // Remove mime parameter from `path`
-
-  // Find size parameter in `path`
-  delimiter_position = path.find(';');
-
-  parameters.push_back(path.substr(0, delimiter_position));
-
-  // Find token parameter in `path`
-  delimiter_position = path.find(';');
-
-  // Since the token is optional, only get and assign the token
-  // parameters value if it exists.
-  if (delimiter_position != std::string::npos) {
-    parameters.push_back(
-        path.substr(delimiter_position + 1, path.length() - 1));
+    return;
   }
 
-  /// Check if a parameter exists within a `std::vector` of Titan
-  /// parameters.
-  /* auto parameter_exists = [](
-    const std::vector<std::string> &_parameters,
-    const std::string &parameter
-  ) -> bool {
-    return std::any_of(
-      _parameters.begin(),
-      _parameters.end(),
-      [&](const std::string &s) -> bool {
-        return s.find(parameter) != std::string::npos;
-      }
-    );
-  }; */
+  const auto upload = parse_upload(request.substr(0, header_end_bytes), token,
+                                   maximum_upload_bytes);
+  const std::string_view body =
+      request.substr(header_end_bytes + header_terminator_bytes);
 
-  std::map<std::string, std::string> parameters_map =
-      maple::titan::parameters_to_map(parameters);
+  if (!upload || body.size() != upload->size_bytes) {
+    response << "59 Invalid Titan request.\r\n";
 
-  // Make sure all tokens have been supplied
-  for (;;) {
-    if (parameters_map.find("mime") == parameters_map.end()) {
-      response << "20 text/gemini\r\nThe serve (Maple) did not "
-                  "receive a mime parameter!";
-
-      break;
-    }
-
-    if (parameters_map.find("size") == parameters_map.end()) {
-      response << "20 text/gemini\r\nThe serve (Maple) did not "
-                  "receive a size parameter!";
-
-      break;
-    }
-
-    if (!titan_token.empty() &&
-        parameters_map.find("token") == parameters_map.end()) {
-      response << "20 text/gemini\r\nThe serve (Maple) did not "
-                  "receive a token parameter!";
-
-      break;
-    }
-
-    try {
-      const std::size_t body_size =
-          static_cast<std::size_t>(std::stoi(parameters_map.at("size")));
-
-      if (body_size > titan_max_size) {
-        response << "20 text/gemini\r\nThe server (Maple) received a body "
-                 << "which is larger than the maximum allowed body size ("
-                 << titan_max_size << ").";
-
-        break;
-      }
-    } catch (...) {
-      response << "20 text/gemini\r\nThe server (Maple) could not interpret "
-                  "the size parameter as an integer!";
-
-      break;
-    }
-
-    if (update_path == "/") {
-      update_path = "/index.gmi";
-    }
-
-    const auto token_iterator = parameters_map.find("token");
-    const std::string token =
-        token_iterator == parameters_map.end() ? "" : token_iterator->second;
-
-    if (token == titan_token) {
-      if (!content::write(update_path, body)) {
-        response << "50 Unable to write content.\r\n";
-
-        return;
-      }
-
-      response << "20 text/gemini\r\nSuccessfully wrote " << body.length()
-               << " bytes to " << update_path << '!';
-    } else {
-      response << "20 text/gemini\r\nThe server (Maple) wrote to "
-               << update_path;
-    }
-
-    break;
+    return;
   }
+
+  if (!content::write(upload->path, body)) {
+    response << "50 Unable to write content.\r\n";
+
+    return;
+  }
+
+  response << "20 text/gemini\r\nUpload complete.\n";
 }
 } // namespace maple::titan

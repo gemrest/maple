@@ -41,14 +41,15 @@
 #include "gemini.hh"
 #include "maple.hh"
 #include "titan.hh"
+#include "size.hh"
 
 auto main() -> int {
   bool titan = false;
   std::string titan_token;
-  std::size_t titan_max_size = 0;
+  std::size_t maximum_upload_bytes = 0;
 
   // Check if the user is want to support Titan and set it up
-  if (maple::setup_environment(titan, titan_token, titan_max_size) == 1) {
+  if (maple::setup_environment(titan, titan_token, maximum_upload_bytes) == 1) {
     return EXIT_FAILURE;
   }
 
@@ -160,7 +161,7 @@ auto main() -> int {
                        "Titan support enabled!";
               } else {
                 maple::titan::handle_client(response, path, titan_token,
-                                            titan_max_size);
+                                            maximum_upload_bytes);
               }
             }
 
@@ -199,7 +200,7 @@ auto prepare_exit_with(const char *message, bool ssl) -> int {
 }
 
 auto setup_environment(bool &titan, std::string &titan_token,
-                       std::size_t &titan_max_size) -> int {
+                       std::size_t &maximum_upload_bytes) -> int {
   char *titan_environment = std::getenv("TITAN");
 
   if (titan_environment == nullptr) {
@@ -214,7 +215,7 @@ auto setup_environment(bool &titan, std::string &titan_token,
 
     if (valid_titan_environment == "true" || valid_titan_environment == "1") {
       char *unvalidated_titan_token = std::getenv("TITAN_TOKEN");
-      char *unvalidated_titan_max_size = std::getenv("TITAN_MAX_SIZE");
+      char *configured_maximum_upload_bytes = std::getenv("TITAN_MAX_SIZE");
 
       if (unvalidated_titan_token == nullptr) {
         titan_token = "";
@@ -222,20 +223,22 @@ auto setup_environment(bool &titan, std::string &titan_token,
         titan_token = std::string(unvalidated_titan_token);
       }
 
-      if (unvalidated_titan_max_size == nullptr) {
-        constexpr std::size_t TITAN_MAX_SIZE = 1024;
+      if (configured_maximum_upload_bytes == nullptr) {
+        constexpr std::size_t default_maximum_upload_bytes = 1024;
 
-        titan_max_size = TITAN_MAX_SIZE;
+        maximum_upload_bytes = default_maximum_upload_bytes;
 
         std::cout << "no TITAN_MAX_SIZE set, defaulting to 1024\n";
       } else {
-        try {
-          titan_max_size =
-              static_cast<std::size_t>(std::stoi(unvalidated_titan_max_size));
-        } catch (...) {
-          return maple::prepare_exit_with(
-              "TITAN_MAX_SIZE could not be interpreted as an integer", false);
+        const auto parsed_maximum_upload_bytes = maple::parse_size(configured_maximum_upload_bytes);
+
+        if (!parsed_maximum_upload_bytes) {
+          std::cerr << "TITAN_MAX_SIZE must be an unsigned integer.\n";
+
+          return EXIT_FAILURE;
         }
+
+        maximum_upload_bytes = *parsed_maximum_upload_bytes;
       }
 
       titan = true;

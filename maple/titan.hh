@@ -21,19 +21,23 @@
 #ifndef TITAN_HH
 #define TITAN_HH
 
-#include <map>
+#include <cstddef>
+#include <optional>
 #include <sstream>
-#include <vector>
+#include <string>
+#include <string_view>
 
-namespace maple {
-namespace titan {
-/// Convert a `std::vector` of Titan parameters into a key/ value `std::map`
-auto parameters_to_map(const std::vector<std::string> &)
-    -> std::map<std::string, std::string>;
+namespace maple::titan {
+struct Upload {
+  std::string path;
+  std::size_t size_bytes;
+};
 
-auto handle_client(std::stringstream &, std::string, const std::string &,
-                   std::size_t) -> void;
-} // namespace titan
-} // namespace maple
+auto parse_upload(std::string_view header, std::string_view token,
+                  std::size_t maximum_upload_bytes) -> std::optional<Upload>;
+auto handle_client(std::stringstream &response, std::string_view request,
+                   std::string_view token, std::size_t maximum_upload_bytes)
+    -> void;
+} // namespace maple::titan
 
-#endif // TITAN_HH
+#endif
