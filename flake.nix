@@ -1,15 +1,8 @@
 {
-  description = "A very simple static Gemini server, now with Titan support!";
-
+  description = "A small static Gemini server with optional Titan uploads";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
     systems.url = "github:nix-systems/default";
-
-    flake-compat = {
-      url = "github:edolstra/flake-compat";
-      flake = false;
-    };
-
     flake-utils = {
       url = "github:numtide/flake-utils";
       inputs.systems.follows = "systems";
@@ -26,71 +19,62 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = import nixpkgs { inherit system; };
-
-        meta = with pkgs.lib; {
-          description = "A very simple static Gemini server, now with Titan support!";
-          homepage = "https://github.com/gemrest/maple";
-          license = licenses.gpl3Only;
-          maintainers = [ maintainers.Fuwn ];
-          mainPackage = "maple";
-          platforms = platforms.unix;
+        packageSet = import nixpkgs { inherit system; };
+        maple = packageSet.clangStdenv.mkDerivation {
+          pname = "maple";
+          version = "0.1.6";
+          src = packageSet.lib.cleanSource ./.;
+          nativeBuildInputs = [
+            packageSet.ninja
+            packageSet.pkg-config
+          ];
+          buildInputs = [ packageSet.openssl ];
+          nativeCheckInputs = [
+            packageSet.python3
+            packageSet.openssl
+          ];
+          doCheck = true;
+          buildPhase = ''
+            runHook preBuild
+            ninja
+            runHook postBuild
+          '';
+          checkPhase = ''
+            runHook preCheck
+            ninja check
+            runHook postCheck
+          '';
+          installPhase = ''
+            runHook preInstall
+            mkdir -p $out/bin
+            cp build/maple $out/bin/maple
+            runHook postInstall
+          '';
+          meta = with packageSet.lib; {
+            description = "A small static Gemini server with optional Titan uploads";
+            homepage = "https://github.com/gemrest/maple";
+            license = licenses.gpl3Only;
+            maintainers = [ maintainers.Fuwn ];
+            mainProgram = "maple";
+            platforms = platforms.unix;
+          };
         };
-
-        maple =
-          with pkgs;
-          (
-            if pkgs.stdenv.isDarwin then
-              pkgs.clangStdenvNoLibs
-            else
-              pkgs.stdenvAdapters.useMoldLinker pkgs.clangStdenvNoLibs
-          ).mkDerivation
-            {
-              inherit meta;
-
-              name = "maple";
-              version = "0.1.6";
-              src = lib.cleanSource ./.;
-
-              nativeBuildInputs = [
-                ninja
-                clang
-              ];
-
-              buildInputs = [
-                libressl.dev
-              ];
-
-              buildPhase = ''
-                mkdir -p $out/bin
-                ninja
-              '';
-
-              installPhase = ''
-                cp build/maple $out/bin/maple
-              '';
-            };
       in
       {
         packages = {
           inherit maple;
-
           default = maple;
         };
-
         apps = {
           maple = {
-            inherit meta;
-
+            inherit (maple) meta;
             type = "app";
             program = "${maple}/bin/maple";
           };
-
           default = self.apps.${system}.maple;
         };
-
-        devShells.default = import ./shell.nix {
-          inherit pkgs;
+        devShells.default = (packageSet.mkShell.override { stdenv = packageSet.clangStdenv; }) {
+          inputsFrom = [ maple ];
         };
       }
     );
