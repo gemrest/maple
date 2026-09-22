@@ -5,14 +5,15 @@
 .idea
 .vscode
 
-# Tup
-.tup
-
 # Build Artifacts
 build
 
 # Ninja
 .ninja_log
+.ninja_deps
 
 # Nix
 result
+
+# Python Tests
+__pycache__/
