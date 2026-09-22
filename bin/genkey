@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 
-read \
-  -rp \
-  "Which common name (hostname) would you like to use for the generated key? " \
-  common_name
+set -euo pipefail
+umask 077
 
-openssl req \
-  -new \
-  -subj "/CN=$common_name" \
-  -x509 \
-  -newkey ec \
+if [[ -e .maple/private.pem || -L .maple/private.pem ||
+      -e .maple/public.pem || -L .maple/public.pem ]]; then
+  echo 'A certificate or key already exists in .maple; refusing to overwrite it.' >&2
+
+  exit 1
+fi
+
+mkdir -p .maple/gmi
+read -r -p 'Hostname for the Certificate: ' common_name
+openssl req -new -x509 -newkey ec \
   -pkeyopt ec_paramgen_curve:prime256v1 \
-  -days 365 \
-  -nodes \
-  -out .maple/public.pem \
-  -keyout .maple/private.pem \
-  -inform pem
+  -subj "/CN=$common_name" -days 365 -nodes \
+  -out .maple/public.pem -keyout .maple/private.pem
