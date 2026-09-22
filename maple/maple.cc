@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -138,7 +139,6 @@ auto main() -> int {
   for (;;) {
     sockaddr_in socket_address{};
     unsigned int socket_address_bytes = sizeof(socket_address);
-    SSL *tls_session;
     const int client = accept(maple::maple_socket,
                               reinterpret_cast<sockaddr *>(&socket_address),
                               &socket_address_bytes);
@@ -147,14 +147,21 @@ auto main() -> int {
       return maple::prepare_exit_with("unable to accept", false);
     }
 
-    tls_session = SSL_new(maple::ssl_context);
+    SSL *tls_session = SSL_new(maple::ssl_context);
+    const int socket_flags = fcntl(client, F_GETFL, 0);
 
-    SSL_set_fd(tls_session, client);
+    if (tls_session == nullptr || socket_flags < 0 ||
+        fcntl(client, F_SETFL, socket_flags | O_NONBLOCK) < 0 ||
+        SSL_set_fd(tls_session, client) != 1) {
+      SSL_free(tls_session);
+      close(client);
 
-    if (SSL_accept(tls_session) <= 0) {
-      ERR_print_errors_fp(stderr);
-    } else {
-      maple::Connection connection(tls_session);
+      continue;
+    }
+
+    maple::Connection connection(tls_session);
+
+    if (connection.handshake()) {
       const std::string response = serve_request(
           connection, titan_enabled, titan_token, maximum_upload_bytes);
 
