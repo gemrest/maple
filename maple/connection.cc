@@ -22,6 +22,11 @@ auto Connection::retry(int result) -> bool {
 
   while (!stopping_ && std::chrono::steady_clock::now() < deadline_) {
     const auto remaining = deadline_ - std::chrono::steady_clock::now();
+
+    if (remaining <= std::chrono::steady_clock::duration::zero()) {
+      return false;
+    }
+
     const auto milliseconds =
         std::chrono::ceil<std::chrono::milliseconds>(remaining);
     const int timeout_milliseconds = static_cast<int>(
