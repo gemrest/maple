@@ -156,15 +156,28 @@ auto write(std::string_view path, std::string_view body) -> bool {
     return false;
   }
 
-  Descriptor file(openat(destination->directory.get(),
-                         destination->name.c_str(),
-                         O_WRONLY | O_CREAT | O_NOFOLLOW | O_NONBLOCK, 0600));
   struct stat status{};
+  const int existing =
+      fstatat(destination->directory.get(), destination->name.c_str(), &status,
+              AT_SYMLINK_NOFOLLOW);
 
-  if (file.get() < 0 || fstat(file.get(), &status) < 0 ||
-      !S_ISREG(status.st_mode) || ftruncate(file.get(), 0) < 0) {
+  if ((existing == 0 && !S_ISREG(status.st_mode)) ||
+      (existing < 0 && errno != ENOENT)) {
     return false;
   }
+
+  static unsigned long sequence = 0;
+  const std::string temporary_name = ".maple-upload-" +
+                                     std::to_string(getpid()) + "-" +
+                                     std::to_string(sequence++);
+  Descriptor file(openat(destination->directory.get(), temporary_name.c_str(),
+                         O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600));
+
+  if (file.get() < 0) {
+    return false;
+  }
+
+  bool complete = true;
 
   while (!body.empty()) {
     const ssize_t byte_count = ::write(file.get(), body.data(), body.size());
@@ -174,12 +187,26 @@ auto write(std::string_view path, std::string_view body) -> bool {
     }
 
     if (byte_count <= 0) {
-      return false;
+      complete = false;
+
+      break;
     }
 
     body.remove_prefix(static_cast<std::size_t>(byte_count));
   }
 
-  return true;
+  complete = complete && fsync(file.get()) == 0;
+
+  if (complete) {
+    complete =
+        renameat(destination->directory.get(), temporary_name.c_str(),
+                 destination->directory.get(), destination->name.c_str()) == 0;
+  }
+
+  if (!complete) {
+    unlinkat(destination->directory.get(), temporary_name.c_str(), 0);
+  }
+
+  return complete;
 }
 } // namespace maple::content

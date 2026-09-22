@@ -19,7 +19,6 @@
  */
 
 #include "titan.hh"
-#include "content.hh"
 #include "size.hh"
 
 namespace maple::titan {
@@ -85,37 +84,5 @@ auto parse_upload(std::string_view header, std::string_view token,
   }
 
   return Upload{path, *size_bytes};
-}
-
-auto handle_client(std::stringstream &response, std::string_view request,
-                   std::string_view token, std::size_t maximum_upload_bytes)
-    -> void {
-  constexpr std::size_t header_terminator_bytes = 2;
-  const std::size_t header_end_bytes = request.find("\r\n");
-
-  if (header_end_bytes == std::string_view::npos) {
-    response << "59 Incomplete Titan header.\r\n";
-
-    return;
-  }
-
-  const auto upload = parse_upload(request.substr(0, header_end_bytes), token,
-                                   maximum_upload_bytes);
-  const std::string_view body =
-      request.substr(header_end_bytes + header_terminator_bytes);
-
-  if (!upload || body.size() != upload->size_bytes) {
-    response << "59 Invalid Titan request.\r\n";
-
-    return;
-  }
-
-  if (!content::write(upload->path, body)) {
-    response << "50 Unable to write content.\r\n";
-
-    return;
-  }
-
-  response << "20 text/gemini\r\nUpload complete.\n";
 }
 } // namespace maple::titan

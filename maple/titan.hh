@@ -23,7 +23,6 @@
 
 #include <cstddef>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 
@@ -35,9 +34,6 @@ struct Upload {
 
 auto parse_upload(std::string_view header, std::string_view token,
                   std::size_t maximum_upload_bytes) -> std::optional<Upload>;
-auto handle_client(std::stringstream &response, std::string_view request,
-                   std::string_view token, std::size_t maximum_upload_bytes)
-    -> void;
 } // namespace maple::titan
 
 #endif

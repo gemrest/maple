@@ -13,9 +13,10 @@ rule link
 
 build $outdir/$name.o:  compile $srcdir/$name.cc
 build $outdir/gemini.o: compile $srcdir/gemini.cc
+build $outdir/connection.o: compile $srcdir/connection.cc
 build $outdir/content.o: compile $srcdir/content.cc
 build $outdir/titan.o:  compile $srcdir/titan.cc
 
-build $outdir/$name: link $outdir/$name.o $outdir/gemini.o $outdir/titan.o $outdir/content.o
+build $outdir/$name: link $outdir/$name.o $outdir/gemini.o $outdir/titan.o $outdir/content.o $outdir/connection.o
 
 default $outdir/$name

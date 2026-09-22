@@ -191,12 +191,85 @@ class ServerTests(unittest.TestCase):
     def test_strict_upload_size(self):
         self.start(TITAN_MAX_SIZE='4')
 
-        for declared_size_bytes in ('0', '1junk', '-1', '99999999999999999999999999'):
+        for declared_size_bytes in ('5', '1junk', '-1', '99999999999999999999999999'):
             with self.subTest(size=declared_size_bytes):
                 response = self.upload('/existing.gmi', b'OVERSIZED', declared_size_bytes=declared_size_bytes)
 
                 self.assertTrue(response.startswith(b'59'))
                 self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'ORIGINAL')
+
+    def test_upload_uses_declared_size_across_tls_records(self):
+        self.start(TITAN_MAX_SIZE='4')
+
+        header = b'titan://localhost/existing.gmi;mime=text/gemini;size=4\r\n'
+        payload = b'DATAEXTRA'
+
+        for records in ((header + payload,), (header + payload[:4], payload[4:]),
+                        (header + payload[:2], payload[2:])):
+            with self.subTest(records=len(records), first_record_bytes=len(records[0])):
+                (self.content / 'existing.gmi').write_bytes(b'ORIGINAL')
+
+                incoming = ssl.MemoryBIO()
+                outgoing = ssl.MemoryBIO()
+                session = self.context.wrap_bio(incoming, outgoing, server_hostname='localhost')
+
+                with socket.create_connection(('127.0.0.1', DEFAULT_PORT), timeout=CONNECTION_TIMEOUT_SECONDS) as transport:
+                    while True:
+                        try:
+                            session.do_handshake()
+
+                            break
+                        except ssl.SSLWantReadError:
+                            transport.sendall(outgoing.read())
+
+                            encrypted_bytes = transport.recv(RECEIVE_BUFFER_BYTES)
+
+                            self.assertTrue(encrypted_bytes)
+                            incoming.write(encrypted_bytes)
+
+                    # Queue every TLS record before sending to avoid a race with the response.
+                    for record in records:
+                        session.write(record)
+
+                    transport.sendall(outgoing.read())
+
+                    response = bytearray()
+
+                    while b'\r\n' not in response:
+                        try:
+                            chunk = session.read(RESPONSE_PREFIX_BYTES)
+                        except ssl.SSLWantReadError:
+                            try:
+                                encrypted_bytes = transport.recv(RECEIVE_BUFFER_BYTES)
+                            except ConnectionResetError:
+                                # Unread surplus ciphertext can reset TCP when the server closes.
+                                break
+
+                            if not encrypted_bytes:
+                                break
+
+                            incoming.write(encrypted_bytes)
+
+                            continue
+
+                        if not chunk:
+                            break
+
+                        response.extend(chunk)
+
+                    if response:
+                        self.assertTrue(response.startswith(b'20'), response)
+
+                self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'DATA')
+                self.assertIsNone(self.process.poll())
+
+    def test_empty_upload_ignores_surplus_bytes(self):
+        self.start(TITAN_MAX_SIZE='0')
+
+        response = self.upload('/existing.gmi', b'EXTRA', declared_size_bytes=0)
+
+        self.assertTrue(response.startswith(b'20'))
+        self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'')
 
     def test_negative_configured_size(self):
         environment = {**os.environ, 'TITAN': '1', 'TITAN_MAX_SIZE': '-1'}
@@ -206,7 +279,6 @@ class ServerTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
 
-    @unittest.expectedFailure
     def test_fragmented_request_and_body(self):
         self.start()
         self.assertEqual(self.request(b'gemini://local', b'host/existing.gmi\r', b'\n'),
@@ -226,7 +298,6 @@ class ServerTests(unittest.TestCase):
 
         self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'ORIGINAL')
 
-    @unittest.expectedFailure
     def test_large_upload(self):
         body_size_bytes = 64 * 1024
         body = b'X' * body_size_bytes
@@ -243,6 +314,54 @@ class ServerTests(unittest.TestCase):
     def test_failed_write(self):
         self.start()
         self.assertTrue(self.upload('/missing/file.gmi', b'DATA').startswith(b'50'))
+
+    def test_upload_replaces_without_following_hard_links(self):
+        os.link(self.directory / 'outside/index.gmi', self.content / 'hardlink.gmi')
+        self.start()
+        self.assertTrue(self.upload('/hardlink.gmi', b'NEW').startswith(b'20'))
+        self.assertEqual((self.content / 'hardlink.gmi').read_bytes(), b'NEW')
+        self.assertEqual((self.directory / 'outside/index.gmi').read_bytes(), b'OUTSIDE')
+        self.assertEqual(list(self.content.glob('.maple-upload-*')), [])
+
+    def test_parameter_order_and_empty_upload(self):
+        self.start(TITAN_TOKEN='expected')
+
+        response = self.request(b'titan://localhost/empty.gmi;token=expected;size=0;mime=text/gemini\r\n')
+
+        self.assertTrue(response.startswith(b'20'))
+        self.assertEqual((self.content / 'empty.gmi').read_bytes(), b'')
+
+    def test_duplicate_and_missing_parameters(self):
+        self.start()
+
+        for parameters in (b'size=1;size=1;mime=text/gemini', b'size=1',
+                           b'mime=text/gemini', b'size=1;mime=text/plain',
+                           b'size=1;mime=text/gemini;broken'):
+            with self.subTest(parameters=parameters):
+                response = self.request(b'titan://localhost/existing.gmi;' + parameters + b'\r\nx')
+
+                self.assertTrue(response.startswith(b'59'))
+                self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'ORIGINAL')
+
+    def test_invalid_headers(self):
+        self.start()
+
+        for header in (b'gemini://localhost/\n', b'gemini://localhost/\x00.gmi\r\n',
+                       b'gemini://localhost/' + b'x' * 1024 + b'\r\n',
+                       b'other://localhost/\r\n'):
+            with self.subTest(header=header[:40]):
+                self.assertTrue(self.request(header).startswith(b'59'))
+
+    def test_nonregular_and_non_gemini_files(self):
+        (self.content / 'directory.gmi').mkdir()
+        os.mkfifo(self.content / 'pipe.gmi')
+        (self.content / 'unsupported.txt').write_bytes(b'UNSUPPORTED')
+        self.start()
+
+        for path in ('/directory.gmi', '/pipe.gmi', '/unsupported.txt'):
+            with self.subTest(path=path):
+                self.assertTrue(self.request(f'gemini://localhost{path}\r\n'.encode()).startswith(b'51'))
+                self.assertTrue(self.upload(path, b'BAD').startswith(b'50'))
 
     @unittest.expectedFailure
     def test_idle_handshake_expires(self):

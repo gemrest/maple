@@ -42,18 +42,88 @@
 #include "maple.hh"
 #include "titan.hh"
 #include "size.hh"
+#include "connection.hh"
+#include "content.hh"
+
+namespace {
+auto serve_request(maple::Connection &connection, bool titan_enabled,
+                   const std::string &token, std::size_t maximum_upload_bytes)
+    -> std::string {
+  constexpr std::string_view titan_scheme = "titan://";
+  constexpr std::string_view gemini_scheme = "gemini://";
+  const auto header = connection.read_header();
+
+  if (!header) {
+    return "59 Invalid request header.\r\n";
+  }
+
+  const bool is_titan = header->starts_with(titan_scheme);
+  const std::size_t scheme_bytes =
+      is_titan ? titan_scheme.size() : gemini_scheme.size();
+
+  if (!is_titan && !header->starts_with(gemini_scheme)) {
+    return "59 Unsupported scheme.\r\n";
+  }
+
+  const std::string_view address(*header);
+  const std::size_t path_start_bytes = address.find('/', scheme_bytes);
+  const std::string_view authority =
+      address.substr(scheme_bytes, path_start_bytes - scheme_bytes);
+
+  if (authority.empty() ||
+      address.find_first_of(" \t\r\n#") != std::string_view::npos) {
+    return "59 Invalid URL.\r\n";
+  }
+
+  const std::string path = path_start_bytes == std::string_view::npos
+                               ? "/"
+                               : std::string(address.substr(path_start_bytes));
+
+  if (!is_titan) {
+    std::stringstream response;
+    const std::size_t query_start_bytes = path.find('?');
+    const std::string content_path = path.substr(0, query_start_bytes);
+
+    maple::gemini::handle_client(content_path, response);
+
+    return response.str();
+  }
+
+  if (!titan_enabled) {
+    return "59 Titan is disabled.\r\n";
+  }
+
+  const auto upload =
+      maple::titan::parse_upload(path, token, maximum_upload_bytes);
+
+  if (!upload) {
+    return "59 Invalid Titan parameters or token.\r\n";
+  }
+
+  const auto body = connection.read_body(upload->size_bytes);
+
+  if (!body) {
+    return "59 Incomplete upload.\r\n";
+  }
+
+  if (!maple::content::write(upload->path, *body)) {
+    return "50 Unable to write content.\r\n";
+  }
+
+  return "20 text/gemini\r\nUpload complete.\n";
+}
+} // namespace
 
 auto main() -> int {
-  bool titan = false;
+  bool titan_enabled = false;
   std::string titan_token;
   std::size_t maximum_upload_bytes = 0;
 
-  // Check if the user is want to support Titan and set it up
-  if (maple::setup_environment(titan, titan_token, maximum_upload_bytes) == 1) {
+  if (maple::setup_environment(titan_enabled, titan_token,
+                               maximum_upload_bytes) == 1) {
     return EXIT_FAILURE;
   }
 
-  // Try a graceful shutdown when a SIGINT is detected
   signal(SIGINT, [](int _signal) -> void {
     std::cout << "shutdown(" << _signal << ")\n";
     close(maple::maple_socket);
@@ -61,129 +131,40 @@ auto main() -> int {
   });
   signal(SIGPIPE, SIG_IGN);
 
-  // Setup SSL
   if (maple::setup_ssl() == EXIT_FAILURE) {
     return EXIT_FAILURE;
   }
 
-  // Listen and serve connections
   for (;;) {
-    sockaddr_in socket_address_{};
-    unsigned int socket_address_length = sizeof(socket_address_);
-    SSL *ssl;
+    sockaddr_in socket_address{};
+    unsigned int socket_address_bytes = sizeof(socket_address);
+    SSL *tls_session;
     const int client = accept(maple::maple_socket,
-                              reinterpret_cast<sockaddr *>(&socket_address_),
-                              &socket_address_length);
+                              reinterpret_cast<sockaddr *>(&socket_address),
+                              &socket_address_bytes);
 
     if (client < 0) {
       return maple::prepare_exit_with("unable to accept", false);
     }
 
-    ssl = SSL_new(maple::ssl_context);
+    tls_session = SSL_new(maple::ssl_context);
 
-    SSL_set_fd(ssl, client);
+    SSL_set_fd(tls_session, client);
 
-    if (SSL_accept(ssl) <= 0) {
+    if (SSL_accept(tls_session) <= 0) {
       ERR_print_errors_fp(stderr);
     } else {
-      std::stringstream response;
-      std::size_t index_of_junk;
-      int request_scheme; // Gemini = 1, Titan = 2, Error = 0
-      std::size_t bytes_read = 0;
-      constexpr std::size_t GEMINI_MAXIMUM_REQUEST_SIZE = 1024;
-      std::array<char, GEMINI_MAXIMUM_REQUEST_SIZE> request{};
-      const int read_result =
-          SSL_read_ex(ssl, request.begin(), request.size(), &bytes_read);
+      maple::Connection connection(tls_session);
+      const std::string response = serve_request(
+          connection, titan_enabled, titan_token, maximum_upload_bytes);
 
-      if (read_result > 0 && bytes_read > 0) {
-        std::string path(request.data(), bytes_read);
-
-        if (path.starts_with("gemini://")) {
-          request_scheme = 1;
-        } else if (path.starts_with("titan://")) {
-          request_scheme = 2;
-        } else {
-          request_scheme = 0;
-        }
-
-        if (request_scheme != 0) {
-          bool request_valid = true;
-
-          // Remove "\r\n" if Gemini
-          if (request_scheme == 1) {
-            if (path.size() < 2) {
-              std::cout << "received malformed gemini request\n";
-
-              request_valid = false;
-            } else {
-              path.resize(path.size() - 2);
-            }
-          }
-
-          if (request_valid) {
-            if (request_scheme == 1) {
-              constexpr std::size_t GEMINI_PROTOCOL_LENGTH = 9;
-
-              path.erase(0, GEMINI_PROTOCOL_LENGTH); // Remove "gemini://"
-            } else {
-              constexpr std::size_t TITAN_PROTOCOL_LENGTH = 8;
-
-              path.erase(0, TITAN_PROTOCOL_LENGTH); // Remove "titan://"
-            }
-
-            // Try to remove the host, if you cannot; it must be a trailing
-            // slash-less hostname, so we will respond with the index.
-            const std::size_t found_first = path.find_first_of('/');
-
-            if (found_first != std::string::npos) {
-              path = path.substr(found_first,
-                                 path.size() - 1); // Remove host
-            } else {
-              path = "/index.gmi";
-            }
-
-            if (request_scheme == 1) {
-              // Remove junk, if any
-              index_of_junk = path.find_first_of('\n');
-
-              if (index_of_junk != std::string::npos) {
-                path.erase(path.find_first_of('\n') - 1, path.size() - 1);
-              }
-            }
-
-            // Gemini
-            if (request_scheme == 1) {
-              maple::gemini::handle_client(path, response);
-            } else { // Titan
-              if (!titan) {
-                response
-                    << "20 text/gemini\r\nThe server (Maple) does not have "
-                       "Titan support enabled!";
-              } else {
-                maple::titan::handle_client(response, path, titan_token,
-                                            maximum_upload_bytes);
-              }
-            }
-
-            const std::string response_string = response.str();
-            const int bytes_written =
-                SSL_write(ssl, response_string.c_str(),
-                          static_cast<int>(response_string.size()));
-
-            if (bytes_written <= 0) {
-              ERR_print_errors_fp(stderr);
-            }
-          }
-        } else {
-          std::cout << "received a request with an unsupported url scheme\n";
-        }
-      } else {
+      if (!connection.write(response)) {
         ERR_print_errors_fp(stderr);
       }
     }
 
-    SSL_shutdown(ssl);
-    SSL_free(ssl);
+    SSL_shutdown(tls_session);
+    SSL_free(tls_session);
     close(client);
   }
 }
@@ -199,12 +180,12 @@ auto prepare_exit_with(const char *message, bool ssl) -> int {
   return EXIT_FAILURE;
 }
 
-auto setup_environment(bool &titan, std::string &titan_token,
+auto setup_environment(bool &titan_enabled, std::string &titan_token,
                        std::size_t &maximum_upload_bytes) -> int {
   char *titan_environment = std::getenv("TITAN");
 
   if (titan_environment == nullptr) {
-    titan = false;
+    titan_enabled = false;
   } else {
     std::string valid_titan_environment(titan_environment);
 
@@ -230,7 +211,8 @@ auto setup_environment(bool &titan, std::string &titan_token,
 
         std::cout << "no TITAN_MAX_SIZE set, defaulting to 1024\n";
       } else {
-        const auto parsed_maximum_upload_bytes = maple::parse_size(configured_maximum_upload_bytes);
+        const auto parsed_maximum_upload_bytes =
+            maple::parse_size(configured_maximum_upload_bytes);
 
         if (!parsed_maximum_upload_bytes) {
           std::cerr << "TITAN_MAX_SIZE must be an unsigned integer.\n";
@@ -241,7 +223,7 @@ auto setup_environment(bool &titan, std::string &titan_token,
         maximum_upload_bytes = *parsed_maximum_upload_bytes;
       }
 
-      titan = true;
+      titan_enabled = true;
     }
   }
 
