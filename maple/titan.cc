@@ -24,8 +24,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
 #include "titan.hh"
+#include "content.hh"
 
 namespace maple::titan {
 auto parameters_to_map(const std::vector<std::string> &parameters)
@@ -55,12 +55,14 @@ auto handle_client(std::stringstream &response, std::string path,
                    const std::string &titan_token, std::size_t titan_max_size)
     -> void {
   std::vector<std::string> parameters;
+
   // Find path in `path`
   std::size_t delimiter_position = path.find(';');
   std::string update_path = path.substr(0, delimiter_position);
   const std::string body = path.substr(path.find('\n') + 1, path.length() - 1);
 
   path.erase(path.find('\n') - 1, path.length() - 1);
+
   // parameters.push_back(update_path);
   path.erase(0, delimiter_position + 1); // Remove path from `path`
 
@@ -108,6 +110,7 @@ auto handle_client(std::stringstream &response, std::string path,
     if (parameters_map.find("mime") == parameters_map.end()) {
       response << "20 text/gemini\r\nThe serve (Maple) did not "
                   "receive a mime parameter!";
+
       break;
     }
 
@@ -153,9 +156,11 @@ auto handle_client(std::stringstream &response, std::string path,
         token_iterator == parameters_map.end() ? "" : token_iterator->second;
 
     if (token == titan_token) {
-      std::ofstream file(".maple/gmi" + update_path);
+      if (!content::write(update_path, body)) {
+        response << "50 Unable to write content.\r\n";
 
-      file << body;
+        return;
+      }
 
       response << "20 text/gemini\r\nSuccessfully wrote " << body.length()
                << " bytes to " << update_path << '!';

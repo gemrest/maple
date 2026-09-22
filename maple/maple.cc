@@ -25,7 +25,6 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
 #include <iostream>
 #include <netinet/in.h>
 #include <openssl/err.h>
@@ -34,7 +33,6 @@
 #include <string>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <vector>
 
 #if !defined(__APPLE__)
 #include <asm-generic/socket.h>
@@ -45,11 +43,9 @@
 #include "titan.hh"
 
 auto main() -> int {
-  std::vector<std::string> gemini_files;
   bool titan = false;
   std::string titan_token;
   std::size_t titan_max_size = 0;
-  const std::string GEMINI_FILE_EXTENSION = "gmi";
 
   // Check if the user is want to support Titan and set it up
   if (maple::setup_environment(titan, titan_token, titan_max_size) == 1) {
@@ -59,33 +55,10 @@ auto main() -> int {
   // Try a graceful shutdown when a SIGINT is detected
   signal(SIGINT, [](int _signal) -> void {
     std::cout << "shutdown(" << _signal << ")\n";
-
     close(maple::maple_socket);
     SSL_CTX_free(maple::ssl_context);
   });
   signal(SIGPIPE, SIG_IGN);
-
-  // Find and keep track of all Gemini files to serve
-  for (const std::filesystem::directory_entry &entry :
-       std::filesystem::recursive_directory_iterator(".maple/gmi")) {
-    std::string file_extension = entry.path().string().substr(
-        entry.path().string().find_last_of('.') + 1);
-
-    // Only keep track of file if it is a Gemini file
-    if (std::equal(file_extension.begin(), file_extension.end(),
-                   GEMINI_FILE_EXTENSION.begin(), GEMINI_FILE_EXTENSION.end(),
-                   [](char character_a, char character_b) -> bool {
-                     return std::tolower(character_a) ==
-                            std::tolower(character_b);
-                   })) {
-      gemini_files.push_back(entry.path());
-    }
-  }
-
-  // Inform user of which files will be served
-  for (const std::string &file : gemini_files) {
-    std::cout << "serving " << file << '\n';
-  }
 
   // Setup SSL
   if (maple::setup_ssl() == EXIT_FAILURE) {
@@ -179,7 +152,7 @@ auto main() -> int {
 
             // Gemini
             if (request_scheme == 1) {
-              maple::gemini::handle_client(gemini_files, path, response);
+              maple::gemini::handle_client(path, response);
             } else { // Titan
               if (!titan) {
                 response
@@ -300,7 +273,6 @@ auto setup_ssl() -> int {
   socket_address.sin_family = AF_INET;
   socket_address.sin_port = htons(GEMINI_PORT);
   socket_address.sin_addr.s_addr = htonl(INADDR_ANY);
-
   maple::maple_socket = socket(AF_INET, SOCK_STREAM, 0);
 
   if (maple::maple_socket < 0) {

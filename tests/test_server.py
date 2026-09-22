@@ -146,7 +146,6 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.request(b'gemini://localhost/existing.gmi\r\n'),
                          b'20 text/gemini\r\nORIGINAL')
 
-    @unittest.expectedFailure
     def test_upload_traversal(self):
         self.start()
 
@@ -155,12 +154,10 @@ class ServerTests(unittest.TestCase):
         self.assertEqual((self.directory / 'outside/index.gmi').read_bytes(), b'OUTSIDE')
         self.assertTrue(response.startswith(b'50'))
 
-    @unittest.expectedFailure
     def test_index_traversal(self):
         self.start()
         self.assertNotIn(b'OUTSIDE', self.request(b'gemini://localhost/../../outside/\r\n'))
 
-    @unittest.expectedFailure
     def test_symlinks(self):
         (self.content / 'linked.gmi').symlink_to(self.directory / 'outside/index.gmi')
         (self.content / 'linked').symlink_to(self.directory / 'outside', target_is_directory=True)
@@ -171,13 +168,11 @@ class ServerTests(unittest.TestCase):
         self.upload('/linked/index.gmi', b'CHANGED')
         self.assertEqual((self.directory / 'outside/index.gmi').read_bytes(), b'OUTSIDE')
 
-    @unittest.expectedFailure
     def test_new_upload_is_visible(self):
         self.start()
         self.upload('/new.gmi', b'NEW')
         self.assertEqual(self.request(b'gemini://localhost/new.gmi\r\n'), b'20 text/gemini\r\nNEW')
 
-    @unittest.expectedFailure
     def test_missing_index(self):
         self.start()
         self.assertTrue(self.request(b'gemini://localhost/missing/\r\n').startswith(b'51'))
@@ -250,7 +245,6 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(self.upload('/existing.gmi', b'BAD', token='wrong').startswith(b'59'))
         self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'ORIGINAL')
 
-    @unittest.expectedFailure
     def test_failed_write(self):
         self.start()
         self.assertTrue(self.upload('/missing/file.gmi', b'DATA').startswith(b'50'))

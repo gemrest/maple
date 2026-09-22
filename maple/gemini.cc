@@ -18,34 +18,20 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-#include <algorithm>
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <vector>
-
 #include "gemini.hh"
+#include "content.hh"
 
 namespace maple::gemini {
-auto handle_client(const std::vector<std::string> &gemini_files,
-                   std::string path, std::stringstream &response) -> void {
-  // Check if the route is a file being served
-  if (std::find(gemini_files.begin(), gemini_files.end(),
-                ".maple/gmi" + path) != gemini_files.end()) {
-    // If the route is a file being served; get the file contents
-    response << "20 text/gemini\r\n"
-             << std::ifstream(".maple/gmi" + path).rdbuf();
-  } else {
-    if (path.empty() || path.at(path.length() - 1) == '/') {
-      response << "20 text/gemini\r\n"
-               << std::ifstream(".maple/gmi" + path + "index.gmi").rdbuf();
-    } else {
-      response
-          << "51 The server (Maple) could not find the specified file.\r\n";
-    }
+auto handle_client(const std::string &path, std::stringstream &response)
+    -> void {
+  const auto body = content::read(path);
+
+  if (!body) {
+    response << "51 File not found.\r\n";
+
+    return;
   }
 
-  std::cout << "requested " << path << '\n';
+  response << "20 text/gemini\r\n" << *body;
 }
 } // namespace maple::gemini
