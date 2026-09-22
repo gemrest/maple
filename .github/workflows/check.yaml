@@ -17,3 +17,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang ninja-build pkg-config libssl-dev
       - name: Build and Test
         run: ninja check
+      - name: Build and Test the Container Image
+        run: docker build --tag maple:test .

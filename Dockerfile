@@ -1,32 +1,27 @@
-FROM alpine:latest as environment
+FROM alpine:3.23 AS builder
 
-RUN apk update \
-  && apk upgrade \
-  && apk add --no-cache libstdc++
+RUN apk add --no-cache clang g++ ninja pkgconf openssl-dev openssl python3
 
-FROM environment as build_environment
+WORKDIR /source
 
-RUN apk add --no-cache \
-  clang \
-  ninja \
-  alpine-sdk \
-  openssl-dev \
-  linux-headers
+COPY build.ninja ./
+COPY maple ./maple
+COPY tests ./tests
 
-FROM build_environment as builder
+RUN ninja check
 
-WORKDIR /maple
+FROM alpine:3.23
 
-COPY ./ ./
-
-RUN ninja
-
-FROM environment
+RUN apk add --no-cache libstdc++ libssl3 libcrypto3 \
+    && addgroup -S -g 1000 maple \
+    && adduser -S -u 1000 -G maple maple
 
 WORKDIR /maple
 
-COPY --from=builder /maple/build/maple ./
+COPY --from=builder /source/build/maple /usr/local/bin/maple
+
+USER maple
 
 EXPOSE 1965
 
-ENTRYPOINT ["./maple"]
+ENTRYPOINT ["maple"]

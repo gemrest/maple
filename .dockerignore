@@ -1,6 +1,6 @@
-# Ignore everything
 **
-
-!maple
+!maple/
+!maple/**
+!tests/
+!tests/*.py
 !build.ninja
-

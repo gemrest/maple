@@ -1,7 +1,13 @@
 services:
   maple:
+    build: .
+    image: maple:local
+    user: "${MAPLE_UID:-1000}:${MAPLE_GID:-1000}"
     ports:
       - "1965:1965"
     volumes:
       - "./.maple:/maple/.maple"
-    image: "fuwn/maple:latest"
+    environment:
+      TITAN: "${TITAN:-0}"
+      TITAN_TOKEN: "${TITAN_TOKEN:-}"
+      TITAN_MAX_SIZE: "${TITAN_MAX_SIZE:-1024}"

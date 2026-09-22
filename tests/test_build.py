@@ -17,9 +17,12 @@ class BuildTests(unittest.TestCase):
             shutil.copyfile(repository / 'build.ninja', workspace / 'build.ninja')
             subprocess.run(['ninja'], cwd=workspace, check=True, capture_output=True)
 
-            unchanged = subprocess.check_output(['ninja', '-n'], cwd=workspace, text=True)
+            build_directory = workspace / 'build'
+            outputs = list(build_directory.glob('*.o')) + [build_directory / 'maple']
+            modification_times_nanoseconds = [output.stat().st_mtime_ns for output in outputs]
 
-            self.assertIn('no work to do', unchanged)
+            subprocess.run(['ninja'], cwd=workspace, check=True, capture_output=True)
+            self.assertEqual([output.stat().st_mtime_ns for output in outputs], modification_times_nanoseconds)
             os.utime(workspace / 'maple/content.hh', None)
 
             rebuild = subprocess.check_output(['ninja'], cwd=workspace, text=True)
