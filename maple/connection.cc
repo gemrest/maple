@@ -1,6 +1,7 @@
 #include "connection.hh"
 #include <algorithm>
 #include <array>
+#include <fcntl.h>
 #include <openssl/err.h>
 #include <poll.h>
 
@@ -13,42 +14,61 @@ auto Connection::record_progress() -> void {
 
 auto Connection::retry(int result) -> bool {
   constexpr int maximum_poll_interval_milliseconds = 250;
-  const int error = SSL_get_error(tls_session_, result);
+  const int error = SSL_get_error(tls_session_.get(), result);
 
   if (error != SSL_ERROR_WANT_READ && error != SSL_ERROR_WANT_WRITE) {
     return false;
   }
 
-  const auto remaining = deadline_ - std::chrono::steady_clock::now();
+  while (!stopping_ && std::chrono::steady_clock::now() < deadline_) {
+    const auto remaining = deadline_ - std::chrono::steady_clock::now();
+    const auto milliseconds =
+        std::chrono::ceil<std::chrono::milliseconds>(remaining);
+    const int timeout_milliseconds = static_cast<int>(
+        std::min(milliseconds,
+                 std::chrono::milliseconds(maximum_poll_interval_milliseconds))
+            .count());
+    pollfd descriptor{
+        socket_.get(),
+        static_cast<short>(error == SSL_ERROR_WANT_READ ? POLLIN : POLLOUT), 0};
+    const int ready = poll(&descriptor, 1, timeout_milliseconds);
 
-  if (remaining <= std::chrono::steady_clock::duration::zero()) {
-    return false;
+    if (ready < 0) {
+      return false;
+    }
+
+    // Poll's writability threshold can exceed the space needed for a small write.
+    if (ready == 0 && error == SSL_ERROR_WANT_WRITE) {
+      return !stopping_;
+    }
+
+    if (ready > 0) {
+      return !stopping_ && (descriptor.revents & descriptor.events) != 0;
+    }
   }
 
-  const auto milliseconds =
-      std::chrono::ceil<std::chrono::milliseconds>(remaining);
-  pollfd descriptor{
-      SSL_get_fd(tls_session_),
-      static_cast<short>(error == SSL_ERROR_WANT_READ ? POLLIN : POLLOUT), 0};
+  return false;
+}
 
-  // Poll's writability threshold can exceed the space needed for a small write.
-  const auto wait_duration =
-      error == SSL_ERROR_WANT_WRITE
-          ? std::min(milliseconds, std::chrono::milliseconds(
-                                       maximum_poll_interval_milliseconds))
-          : milliseconds;
-  const int ready =
-      poll(&descriptor, 1, static_cast<int>(wait_duration.count()));
-
-  return (ready > 0 && (descriptor.revents & descriptor.events) != 0) ||
-         (ready == 0 && error == SSL_ERROR_WANT_WRITE);
+Connection::~Connection() {
+  if (tls_session_ && SSL_is_init_finished(tls_session_.get())) {
+    SSL_shutdown(tls_session_.get());
+  }
 }
 
 auto Connection::handshake() -> bool {
-  while (std::chrono::steady_clock::now() < deadline_) {
+  const int flags = fcntl(socket_.get(), F_GETFL, 0);
+
+  if (!tls_session_ || flags < 0 ||
+      fcntl(socket_.get(), F_SETFL, flags | O_NONBLOCK) < 0 ||
+      SSL_set_fd(tls_session_.get(), socket_.get()) != 1) {
+    return false;
+  }
+
+  while (!stopping_ && std::chrono::steady_clock::now() < deadline_) {
     ERR_clear_error();
 
-    const int result = SSL_accept(tls_session_);
+    const int result = SSL_accept(tls_session_.get());
 
     if (result == 1) {
       return true;
@@ -64,11 +84,11 @@ auto Connection::handshake() -> bool {
 
 auto Connection::receive(char *buffer, std::size_t size_bytes,
                          std::size_t &byte_count) -> bool {
-  while (std::chrono::steady_clock::now() < deadline_) {
+  while (!stopping_ && std::chrono::steady_clock::now() < deadline_) {
     ERR_clear_error();
 
     const int result =
-        SSL_read_ex(tls_session_, buffer, size_bytes, &byte_count);
+        SSL_read_ex(tls_session_.get(), buffer, size_bytes, &byte_count);
 
     if (result == 1) {
       if (byte_count == 0) {
@@ -150,7 +170,7 @@ auto Connection::write(std::string_view response) -> bool {
   while (!response.empty()) {
     std::size_t byte_count = 0;
 
-    if (std::chrono::steady_clock::now() >= deadline_) {
+    if (stopping_ || std::chrono::steady_clock::now() >= deadline_) {
       return false;
     }
 
@@ -158,8 +178,8 @@ auto Connection::write(std::string_view response) -> bool {
 
     const std::size_t write_bytes =
         std::min(response.size(), maximum_write_bytes);
-    const int result =
-        SSL_write_ex(tls_session_, response.data(), write_bytes, &byte_count);
+    const int result = SSL_write_ex(tls_session_.get(), response.data(),
+                                    write_bytes, &byte_count);
 
     if (result != 1) {
       if (!retry(result)) {

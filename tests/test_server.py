@@ -2,6 +2,7 @@
 
 import os
 import pathlib
+import select
 import shutil
 import signal
 import socket
@@ -16,11 +17,13 @@ CONNECTION_TIMEOUT_SECONDS = 2
 DEFAULT_PORT = 1965
 IDLE_CONNECTION_TIMEOUT_SECONDS = 1
 PROCESS_EXIT_TIMEOUT_SECONDS = 2
+QUEUED_REQUEST_TIMEOUT_SECONDS = 35
 RECEIVE_BUFFER_BYTES = 65536
 REQUEST_EXPIRY_TIMEOUT_SECONDS = 7
 REQUEST_FRAGMENT_DELAY_SECONDS = 0.02
 RESPONSE_PREFIX_BYTES = 4096
 SERVER_SETTLE_SECONDS = 0.1
+SHUTDOWN_SETTLE_SECONDS = 0.05
 STARTUP_POLL_INTERVAL_SECONDS = 0.01
 STARTUP_PROBE_TIMEOUT_SECONDS = 0.1
 STARTUP_TIMEOUT_SECONDS = 3
@@ -123,15 +126,7 @@ class ServerTests(unittest.TestCase):
                 connection.sendall(part)
                 time.sleep(REQUEST_FRAGMENT_DELAY_SECONDS)
 
-            response = bytearray()
-
-            while True:
-                chunk = connection.recv(RECEIVE_BUFFER_BYTES)
-
-                if not chunk:
-                    return bytes(response)
-
-                response.extend(chunk)
+            return self.read_response(connection)
 
     @staticmethod
     def read_response(connection):
@@ -312,36 +307,6 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(self.upload('/large.gmi', body).startswith(b'20'))
         self.assertEqual((self.content / 'large.gmi').read_bytes(), body)
 
-    def test_progressing_download_outlives_request_deadline(self):
-        slow_reading_duration_seconds = 16
-        read_chunk_bytes = 8192
-        read_interval_seconds = 0.1
-
-        # Exceed socket buffers so paced reads exercise the server's deadline.
-        body = b'X' * (32 * 1024 * 1024)
-        header = b'20 text/gemini\r\n'
-
-        (self.content / 'large.gmi').write_bytes(body)
-        self.start()
-
-        with self.connect(timeout_seconds=REQUEST_EXPIRY_TIMEOUT_SECONDS) as connection:
-            connection.sendall(b'gemini://localhost/large.gmi\r\n')
-
-            response = bytearray()
-            slow_reading_deadline_seconds = time.monotonic() + slow_reading_duration_seconds
-
-            while time.monotonic() < slow_reading_deadline_seconds:
-                chunk = connection.recv(read_chunk_bytes)
-
-                self.assertTrue(chunk)
-                response.extend(chunk)
-                time.sleep(read_interval_seconds)
-
-            response.extend(self.read_response(connection))
-
-        self.assertEqual(len(response), len(header) + len(body))
-        self.assertEqual(bytes(response), header + body)
-
     def test_wrong_token(self):
         self.start(TITAN_TOKEN='expected')
         self.assertTrue(self.upload('/existing.gmi', b'BAD', token='wrong').startswith(b'59'))
@@ -405,25 +370,32 @@ class ServerTests(unittest.TestCase):
         with socket.create_connection(('127.0.0.1', DEFAULT_PORT), timeout=IDLE_CONNECTION_TIMEOUT_SECONDS):
             with self.connect(timeout_seconds=REQUEST_EXPIRY_TIMEOUT_SECONDS) as connection:
                 connection.sendall(b'gemini://localhost/\r\n')
-                self.assertIn(b'INDEX', connection.recv(RESPONSE_PREFIX_BYTES))
+                self.assertIn(b'INDEX', self.read_response(connection))
 
     def test_slow_header_has_absolute_deadline(self):
-        maximum_header_fragments = 12
+        maximum_header_fragments = 14
         header_poll_interval_seconds = 0.5
 
         self.start()
 
         start_time_seconds = time.monotonic()
+        closed = False
 
         with self.connect(timeout_seconds=REQUEST_EXPIRY_TIMEOUT_SECONDS) as connection:
             for _ in range(maximum_header_fragments):
                 try:
                     connection.sendall(b'g')
+
+                    if select.select([connection], [], [], header_poll_interval_seconds)[0]:
+                        closed = connection.recv(RESPONSE_PREFIX_BYTES) == b''
+
+                        break
                 except (OSError, ssl.SSLError):
+                    closed = True
+
                     break
 
-                time.sleep(header_poll_interval_seconds)
-
+        self.assertTrue(closed)
         self.assertLess(time.monotonic() - start_time_seconds, REQUEST_EXPIRY_TIMEOUT_SECONDS)
         self.assertTrue(self.request(b'gemini://localhost/\r\n').startswith(b'20'))
 
@@ -455,7 +427,78 @@ class ServerTests(unittest.TestCase):
 
         self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'DATA')
 
-    @unittest.expectedFailure
+    def test_shutdown_during_handshake(self):
+        self.start()
+
+        with socket.create_connection(('127.0.0.1', DEFAULT_PORT), timeout=IDLE_CONNECTION_TIMEOUT_SECONDS):
+            time.sleep(SHUTDOWN_SETTLE_SECONDS)
+            self.process.send_signal(signal.SIGTERM)
+            self.assertEqual(self.process.wait(timeout=PROCESS_EXIT_TIMEOUT_SECONDS), 0)
+
+    def test_shutdown_during_upload(self):
+        self.start()
+
+        with self.connect() as connection:
+            connection.sendall(b'titan://localhost/existing.gmi;mime=text/gemini;size=4\r\na')
+            time.sleep(SHUTDOWN_SETTLE_SECONDS)
+            self.process.send_signal(signal.SIGINT)
+            self.assertEqual(self.process.wait(timeout=PROCESS_EXIT_TIMEOUT_SECONDS), 0)
+
+        self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'ORIGINAL')
+
+    def test_large_download(self):
+        body = bytes(range(256)) * 8192
+
+        (self.content / 'large.gmi').write_bytes(body)
+        self.start()
+        self.assertEqual(self.request(b'gemini://localhost/large.gmi\r\n'),
+                         b'20 text/gemini\r\n' + body)
+
+    def test_stalled_download_expires(self):
+        with (self.content / 'large.gmi').open('wb') as output:
+            output.truncate(32 * 1024 * 1024)
+
+        self.start()
+
+        with self.connect(timeout_seconds=TRANSFER_EXPIRY_TIMEOUT_SECONDS) as connection:
+            connection.sendall(b'gemini://localhost/large.gmi\r\n')
+            time.sleep(SERVER_SETTLE_SECONDS)
+
+            # Allow initial ciphertext buffering before the inactivity window begins.
+            with self.connect(timeout_seconds=QUEUED_REQUEST_TIMEOUT_SECONDS) as second:
+                second.sendall(b'gemini://localhost/\r\n')
+                self.assertIn(b'INDEX', self.read_response(second))
+
+    def test_progressing_download_outlives_request_deadline(self):
+        slow_reading_duration_seconds = 16
+        read_chunk_bytes = 8192
+        read_interval_seconds = 0.1
+
+        # Exceed socket buffers so paced reads exercise the server's deadline.
+        body = b'X' * (32 * 1024 * 1024)
+        header = b'20 text/gemini\r\n'
+
+        (self.content / 'large.gmi').write_bytes(body)
+        self.start()
+
+        with self.connect(timeout_seconds=REQUEST_EXPIRY_TIMEOUT_SECONDS) as connection:
+            connection.sendall(b'gemini://localhost/large.gmi\r\n')
+
+            response = bytearray()
+            slow_reading_deadline_seconds = time.monotonic() + slow_reading_duration_seconds
+
+            while time.monotonic() < slow_reading_deadline_seconds:
+                chunk = connection.recv(read_chunk_bytes)
+
+                self.assertTrue(chunk)
+                response.extend(chunk)
+                time.sleep(read_interval_seconds)
+
+            response.extend(self.read_response(connection))
+
+        self.assertEqual(len(response), len(header) + len(body))
+        self.assertEqual(bytes(response), header + body)
+
     def test_clean_shutdown(self):
         self.start()
         self.process.send_signal(signal.SIGINT)

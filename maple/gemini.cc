@@ -20,18 +20,43 @@
 
 #include "gemini.hh"
 #include "content.hh"
+#include <array>
+#include <cerrno>
 
 namespace maple::gemini {
-auto handle_client(const std::string &path, std::stringstream &response)
-    -> void {
-  const auto body = content::read(path);
+auto handle_client(Connection &connection, const std::string &path) -> bool {
+  const auto file = content::open_read(path);
 
-  if (!body) {
-    response << "51 File not found.\r\n";
-
-    return;
+  if (file.get() < 0) {
+    return connection.write("51 File not found.\r\n");
   }
 
-  response << "20 text/gemini\r\n" << *body;
+  if (!connection.write("20 text/gemini\r\n")) {
+    return false;
+  }
+
+  constexpr std::size_t buffer_capacity_bytes = 8192;
+  std::array<char, buffer_capacity_bytes> buffer{};
+
+  for (;;) {
+    const ssize_t byte_count = ::read(file.get(), buffer.data(), buffer.size());
+
+    if (byte_count < 0 && errno == EINTR) {
+      continue;
+    }
+
+    if (byte_count < 0) {
+      return false;
+    }
+
+    if (byte_count == 0) {
+      return true;
+    }
+
+    if (!connection.write(std::string_view(
+            buffer.data(), static_cast<std::size_t>(byte_count)))) {
+      return false;
+    }
+  }
 }
 } // namespace maple::gemini

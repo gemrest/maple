@@ -21,13 +21,12 @@
 #ifndef GEMINI_HH
 #define GEMINI_HH
 
-#include <sstream>
+#include "connection.hh"
 #include <string>
 
 namespace maple {
 namespace gemini {
-auto handle_client(const std::string &path, std::stringstream &response)
-    -> void;
+auto handle_client(Connection &connection, const std::string &path) -> bool;
 }
 } // namespace maple
 

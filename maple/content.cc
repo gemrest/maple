@@ -1,47 +1,13 @@
 #include "content.hh"
 #include <algorithm>
-#include <array>
 #include <cerrno>
 #include <cctype>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <utility>
 
 namespace {
-class Descriptor {
-public:
-  explicit Descriptor(int value) : value_(value) {}
-
-  Descriptor(const Descriptor &) = delete;
-  auto operator=(const Descriptor &) -> Descriptor & = delete;
-
-  Descriptor(Descriptor &&other) noexcept
-      : value_(std::exchange(other.value_, -1)) {}
-
-  auto operator=(Descriptor &&other) noexcept -> Descriptor & {
-    if (this != &other) {
-      if (value_ >= 0) {
-        close(value_);
-      }
-
-      value_ = std::exchange(other.value_, -1);
-    }
-
-    return *this;
-  }
-
-  ~Descriptor() {
-    if (value_ >= 0) {
-      close(value_);
-    }
-  }
-
-  auto get() const -> int { return value_; }
-
-private:
-  int value_;
-};
+using maple::Descriptor;
 
 struct Destination {
   Descriptor directory;
@@ -109,11 +75,11 @@ auto resolve(std::string_view path) -> std::optional<Destination> {
 } // namespace
 
 namespace maple::content {
-auto read(std::string_view path) -> std::optional<std::string> {
+auto open_read(std::string_view path) -> Descriptor {
   auto destination = resolve(path);
 
   if (!destination) {
-    return std::nullopt;
+    return Descriptor(-1);
   }
 
   Descriptor file(openat(destination->directory.get(),
@@ -123,30 +89,10 @@ auto read(std::string_view path) -> std::optional<std::string> {
 
   if (file.get() < 0 || fstat(file.get(), &status) < 0 ||
       !S_ISREG(status.st_mode)) {
-    return std::nullopt;
+    return Descriptor(-1);
   }
 
-  constexpr std::size_t buffer_capacity_bytes = 8192;
-  std::string body;
-  std::array<char, buffer_capacity_bytes> buffer{};
-
-  for (;;) {
-    const ssize_t byte_count = ::read(file.get(), buffer.data(), buffer.size());
-
-    if (byte_count < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-
-      return std::nullopt;
-    }
-
-    if (byte_count == 0) {
-      return body;
-    }
-
-    body.append(buffer.data(), static_cast<std::size_t>(byte_count));
-  }
+  return file;
 }
 
 auto write(std::string_view path, std::string_view body) -> bool {
