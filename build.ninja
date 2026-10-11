@@ -19,7 +19,8 @@ build $build_directory/gemini.o: compile maple/gemini.cc
 build $build_directory/titan.o: compile maple/titan.cc
 build $build_directory/content.o: compile maple/content.cc
 build $build_directory/connection.o: compile maple/connection.cc
-build $build_directory/maple: link $build_directory/maple.o $build_directory/gemini.o $build_directory/titan.o $build_directory/content.o $build_directory/connection.o
+build $build_directory/uri.o: compile maple/uri.cc
+build $build_directory/maple: link $build_directory/maple.o $build_directory/gemini.o $build_directory/titan.o $build_directory/content.o $build_directory/connection.o $build_directory/uri.o
 build check: test $build_directory/maple
 
 default $build_directory/maple

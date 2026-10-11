@@ -24,7 +24,7 @@
 #include <cerrno>
 
 namespace maple::gemini {
-auto handle_client(Connection &connection, const std::string &path) -> bool {
+auto handle_client(Connection &connection, std::string_view path) -> bool {
   const auto file = content::open_read(path);
 
   if (file.get() < 0) {

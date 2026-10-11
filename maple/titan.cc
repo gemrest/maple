@@ -31,7 +31,7 @@ auto parse_upload(std::string_view header, std::string_view token,
     return std::nullopt;
   }
 
-  const std::string path(header.substr(0, separator_offset_bytes));
+  const std::string_view path = header.substr(0, separator_offset_bytes);
   std::optional<std::size_t> size_bytes;
   std::optional<std::string_view> mime;
   std::optional<std::string_view> supplied_token;

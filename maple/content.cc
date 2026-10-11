@@ -1,4 +1,5 @@
 #include "content.hh"
+#include "uri.hh"
 #include <algorithm>
 #include <cerrno>
 #include <cctype>
@@ -20,34 +21,29 @@ auto resolve(std::string_view path) -> std::optional<Destination> {
     return std::nullopt;
   }
 
-  std::string relative_path(path.substr(1));
-
-  if (relative_path.empty() || relative_path.back() == '/') {
-    relative_path += "index.gmi";
-  }
+  path.remove_prefix(1);
 
   Descriptor directory(open(".maple/gmi", O_RDONLY | O_DIRECTORY | O_NOFOLLOW));
-  std::size_t component_start_bytes = 0;
 
   if (directory.get() < 0) {
     return std::nullopt;
   }
 
   for (;;) {
-    const std::size_t separator_offset_bytes =
-        relative_path.find('/', component_start_bytes);
-    const std::string component = relative_path.substr(
-        component_start_bytes, separator_offset_bytes - component_start_bytes);
+    const std::size_t separator_offset_bytes = path.find('/');
+    auto component = maple::uri::decode_segment(
+        path.empty() ? "index.gmi" : path.substr(0, separator_offset_bytes));
 
-    if (component.empty() || component == "." || component == "..") {
+    if (!component || component->empty() || *component == "." ||
+        *component == "..") {
       return std::nullopt;
     }
 
     if (separator_offset_bytes == std::string::npos) {
-      const std::size_t extension_start_bytes = component.find_last_of('.');
+      const std::size_t extension_start_bytes = component->find_last_of('.');
       std::string extension = extension_start_bytes == std::string::npos
                                   ? ""
-                                  : component.substr(extension_start_bytes);
+                                  : component->substr(extension_start_bytes);
 
       std::transform(extension.begin(), extension.end(), extension.begin(),
                      [](unsigned char character) {
@@ -58,10 +54,10 @@ auto resolve(std::string_view path) -> std::optional<Destination> {
         return std::nullopt;
       }
 
-      return Destination{std::move(directory), component};
+      return Destination{std::move(directory), std::move(*component)};
     }
 
-    const int child = openat(directory.get(), component.c_str(),
+    const int child = openat(directory.get(), component->c_str(),
                              O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
 
     if (child < 0) {
@@ -69,7 +65,8 @@ auto resolve(std::string_view path) -> std::optional<Destination> {
     }
 
     directory = Descriptor(child);
-    component_start_bytes = separator_offset_bytes + 1;
+
+    path.remove_prefix(separator_offset_bytes + 1);
   }
 }
 } // namespace

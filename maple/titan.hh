@@ -23,15 +23,15 @@
 
 #include <cstddef>
 #include <optional>
-#include <string>
 #include <string_view>
 
 namespace maple::titan {
 struct Upload {
-  std::string path;
+  std::string_view path;
   std::size_t size_bytes;
 };
 
+// Keep the request header alive while using the returned upload path.
 auto parse_upload(std::string_view header, std::string_view token,
                   std::size_t maximum_upload_bytes) -> std::optional<Upload>;
 } // namespace maple::titan

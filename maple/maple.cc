@@ -23,6 +23,7 @@
 #include "gemini.hh"
 #include "size.hh"
 #include "titan.hh"
+#include "uri.hh"
 #include <algorithm>
 #include <cerrno>
 #include <cctype>
@@ -107,41 +108,20 @@ auto configuration() -> std::optional<Configuration> {
 auto serve_request(maple::Connection &connection, bool titan_enabled,
                    const std::string &token, std::size_t maximum_upload_bytes)
     -> bool {
-  constexpr std::string_view titan_scheme = "titan://";
-  constexpr std::string_view gemini_scheme = "gemini://";
   const auto header = connection.read_header();
 
   if (!header) {
     return connection.write("59 Invalid request header.\r\n");
   }
 
-  const bool is_titan = header->starts_with(titan_scheme);
-  const std::size_t scheme_bytes =
-      is_titan ? titan_scheme.size() : gemini_scheme.size();
+  const auto request = maple::uri::parse_request(*header);
 
-  if (!is_titan && !header->starts_with(gemini_scheme)) {
-    return connection.write("59 Unsupported scheme.\r\n");
-  }
-
-  const std::string_view address(*header);
-  const std::size_t path_start_bytes = address.find('/', scheme_bytes);
-  const std::string_view authority =
-      address.substr(scheme_bytes, path_start_bytes - scheme_bytes);
-
-  if (authority.empty() ||
-      address.find_first_of(" \t\r\n#") != std::string_view::npos) {
+  if (!request) {
     return connection.write("59 Invalid URL.\r\n");
   }
 
-  const std::string path = path_start_bytes == std::string_view::npos
-                               ? "/"
-                               : std::string(address.substr(path_start_bytes));
-
-  if (!is_titan) {
-    const std::size_t query_start_bytes = path.find('?');
-    const std::string content_path = path.substr(0, query_start_bytes);
-
-    return maple::gemini::handle_client(connection, content_path);
+  if (!request->titan) {
+    return maple::gemini::handle_client(connection, request->path);
   }
 
   if (!titan_enabled) {
@@ -149,7 +129,7 @@ auto serve_request(maple::Connection &connection, bool titan_enabled,
   }
 
   const auto upload =
-      maple::titan::parse_upload(path, token, maximum_upload_bytes);
+      maple::titan::parse_upload(request->path, token, maximum_upload_bytes);
 
   if (!upload) {
     return connection.write("59 Invalid Titan parameters or token.\r\n");

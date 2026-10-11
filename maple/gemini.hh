@@ -22,11 +22,11 @@
 #define GEMINI_HH
 
 #include "connection.hh"
-#include <string>
+#include <string_view>
 
 namespace maple {
 namespace gemini {
-auto handle_client(Connection &connection, const std::string &path) -> bool;
+auto handle_client(Connection &connection, std::string_view path) -> bool;
 }
 } // namespace maple
 

@@ -154,6 +154,176 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.request(b'gemini://localhost/existing.gmi\r\n'),
                          b'20 text/gemini\r\nORIGINAL')
 
+    def test_query_does_not_change_path(self):
+        self.start()
+
+        for url, body in (
+            ('gemini://localhost?next=/existing.gmi', b'INDEX'),
+            ('gemini://localhost/?next=/existing.gmi', b'INDEX'),
+            ('gemini://localhost/existing.gmi?next=/missing.gmi;size=1', b'ORIGINAL'),
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(self.request(url.encode() + b'\r\n'),
+                                 b'20 text/gemini\r\n' + body)
+
+    def test_case_insensitive_schemes(self):
+        self.start()
+
+        for scheme in ('GEMINI', 'GeMiNi'):
+            with self.subTest(scheme=scheme):
+                self.assertEqual(self.request(f'{scheme}://localhost/existing.gmi\r\n'.encode()),
+                                 b'20 text/gemini\r\nORIGINAL')
+
+        for scheme in ('TITAN', 'TiTaN'):
+            with self.subTest(scheme=scheme):
+                response = self.request(
+                    f'{scheme}://localhost/new.gmi;size=4;mime=text/gemini\r\nDATA'.encode(),
+                )
+
+                self.assertTrue(response.startswith(b'20'), response)
+                self.assertEqual((self.content / 'new.gmi').read_bytes(), b'DATA')
+
+    def test_valid_authorities(self):
+        self.start()
+
+        for authority in ('localhost', 'LOCALHOST', '%6cocalhost', '127.0.0.1',
+                          'localhost:', f'localhost:{self.port}', 'localhost:65535',
+                          '[::1]', f'[::1]:{self.port}', '[2001:db8::1]'):
+            with self.subTest(authority=authority):
+                self.assertEqual(self.request(f'gemini://{authority}/existing.gmi\r\n'.encode()),
+                                 b'20 text/gemini\r\nORIGINAL')
+
+    def test_invalid_authorities(self):
+        self.start()
+
+        for authority in ('', 'user@localhost', 'user:password@localhost', ':1965',
+                          'localhost:banana', 'localhost:-1', 'localhost:+1965',
+                          'localhost:0', 'localhost:65536', 'localhost:1965:1966',
+                          '::1', '[::1', '[]', '[invalid]', '[::1]extra',
+                          '[::1]:banana', 'local%host', 'local\\host'):
+            for scheme in ('gemini', 'titan'):
+                with self.subTest(authority=authority, scheme=scheme):
+                    parameters = ';size=4;mime=text/gemini' if scheme == 'titan' else ''
+                    header = f'{scheme}://{authority}/existing.gmi{parameters}\r\n'
+                    response = self.request(header.encode())
+
+                    self.assertTrue(response.startswith(b'59'), response)
+                    self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'ORIGINAL')
+
+    def test_encoded_gemini_paths(self):
+        files = (
+            ('space%20name.gmi', 'space name.gmi', b'SPACE'),
+            ('caf%C3%A9.gmi', 'café.gmi', b'UNICODE'),
+            ('part%3bsize=4.gmi', 'part;size=4.gmi', b'SEMICOLON'),
+            ('part%3Fnext.gmi', 'part?next.gmi', b'QUESTION'),
+            ('part%23name.gmi', 'part#name.gmi', b'HASH'),
+            ('a+b.gmi', 'a+b.gmi', b'PLUS'),
+            ('%2565xisting.gmi', '%65xisting.gmi', b'LITERAL'),
+            ('directory%20name/%65xisting%2Egmi', 'directory name/existing.gmi', b'NESTED'),
+        )
+
+        for _, name, body in files:
+            destination = self.content / name
+
+            destination.parent.mkdir(exist_ok=True)
+            destination.write_bytes(body)
+
+        self.start()
+        self.assertEqual(self.request(b'gemini://localhost/%65xisting.gmi\r\n'),
+                         b'20 text/gemini\r\nORIGINAL')
+
+        for encoded_path, _, body in files:
+            with self.subTest(path=encoded_path):
+                self.assertEqual(self.request(f'gemini://localhost/{encoded_path}\r\n'.encode()),
+                                 b'20 text/gemini\r\n' + body)
+
+    def test_encoded_upload_paths(self):
+        (self.content / 'directory name').mkdir()
+        self.start()
+
+        for encoded_path, name in (
+            ('%65xisting.gmi', 'existing.gmi'),
+            ('space%20name.gmi', 'space name.gmi'),
+            ('caf%c3%a9.gmi', 'café.gmi'),
+            ('part%3Bsize=4.gmi', 'part;size=4.gmi'),
+            ('part%3fnext.gmi', 'part?next.gmi'),
+            ('part%23name.gmi', 'part#name.gmi'),
+            ('%2565xisting.gmi', '%65xisting.gmi'),
+            ('directory%20name/new.gmi', 'directory name/new.gmi'),
+        ):
+            with self.subTest(path=encoded_path):
+                response = self.upload('/' + encoded_path, b'DATA')
+
+                self.assertTrue(response.startswith(b'20'), response)
+                self.assertEqual((self.content / name).read_bytes(), b'DATA')
+                self.assertEqual(self.request(f'gemini://localhost/{encoded_path}\r\n'.encode()),
+                                 b'20 text/gemini\r\nDATA')
+
+                if encoded_path != name:
+                    self.assertFalse((self.content / encoded_path).exists())
+
+    def test_titan_query_is_not_a_parameter(self):
+        self.start(TITAN_TOKEN='expected')
+
+        response = self.request(
+            b'titan://localhost/existing.gmi;size=4;mime=text/gemini;token=expected'
+            b'?next=/missing.gmi;size=999;token=wrong\r\nDATA',
+        )
+
+        self.assertTrue(response.startswith(b'20'), response)
+        self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'DATA')
+
+        response = self.request(
+            b'titan://localhost/existing.gmi?size=4;mime=text/gemini;token=expected\r\nDATA',
+        )
+
+        self.assertTrue(response.startswith(b'59'), response)
+        self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'DATA')
+
+    def test_invalid_url_characters(self):
+        self.start()
+
+        for path in (b'/existing.gmi%', b'/existing.gmi%1', b'/existing.gmi%XZ',
+                     b'/existing.gmi?bad=%', b'/existing.gmi?bad=%1',
+                     b'/existing.gmi#fragment', b'/existing.gmi?next=#fragment',
+                     b'/existing.gmi\\', b'/existing.gmi[', b'/existing.gmi ',
+                     b'/existing.gmi\t', b'/existing.gmi\x01', b'/existing.gmi\x7f'):
+            with self.subTest(path=path):
+                response = self.request(b'gemini://localhost' + path + b'\r\n')
+
+                self.assertTrue(response.startswith(b'59'), response)
+
+    def test_encoded_traversal_and_separators(self):
+        (self.content / 'folder').mkdir()
+        (self.content / 'folder/existing.gmi').write_bytes(b'NESTED')
+        self.start()
+
+        for path in ('/%2e%2e/outside/index.gmi', '/.%2e/outside/index.gmi',
+                     '/%2e./outside/index.gmi', '/%2E/existing.gmi',
+                     '/folder%2fexisting.gmi', '/folder%2Fexisting.gmi',
+                     '/folder%5cexisting.gmi', '/existing.gmi%00'):
+            with self.subTest(path=path):
+                self.assertFalse(self.request(f'gemini://localhost{path}\r\n'.encode()).startswith(b'20'))
+                self.assertFalse(self.upload(path, b'CHANGED').startswith(b'20'))
+                self.assertEqual((self.content / 'existing.gmi').read_bytes(), b'ORIGINAL')
+                self.assertEqual((self.content / 'folder/existing.gmi').read_bytes(), b'NESTED')
+                self.assertEqual((self.directory / 'outside/index.gmi').read_bytes(), b'OUTSIDE')
+
+        self.assertEqual(sorted(file.relative_to(self.content).as_posix()
+                                for file in self.content.rglob('*') if file.is_file()),
+                         ['existing.gmi', 'folder/existing.gmi', 'index.gmi'])
+
+    def test_encoded_symlinks(self):
+        (self.content / 'linked.gmi').symlink_to(self.directory / 'outside/index.gmi')
+        (self.content / 'linked').symlink_to(self.directory / 'outside', target_is_directory=True)
+        self.start()
+
+        for path in ('/link%65d.gmi', '/link%65d/index.gmi'):
+            with self.subTest(path=path):
+                self.assertFalse(self.request(f'gemini://localhost{path}\r\n'.encode()).startswith(b'20'))
+                self.assertFalse(self.upload(path, b'CHANGED').startswith(b'20'))
+                self.assertEqual((self.directory / 'outside/index.gmi').read_bytes(), b'OUTSIDE')
+
     def test_configured_port_without_titan(self):
         self.start(TITAN='0')
         self.assertEqual(self.request(b'gemini://localhost/existing.gmi\r\n'),

@@ -45,8 +45,10 @@ keys. You can instead provide your own certificate and matching private key.
 Keep the private key readable only by the account running Maple.
 
 Maple serves regular `.gmi` files; directory requests use `index.gmi`. Changes
-become visible without a restart. Symlinks and `.` or `..` path components are
-rejected. Content directories must already exist before uploading into them.
+become visible without a restart. URL path components are percent-decoded once;
+queries do not affect file selection. Symlinks, encoded separators, NUL bytes,
+and `.` or `..` path components are rejected. Content directories must already
+exist before uploading into them.
 
 ## Titan
 
