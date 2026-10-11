@@ -2,8 +2,20 @@ compiler = clang++
 compiler_flags = -std=c++20 -O2 -Weverything -Wno-padded -Wno-c++98-compat -Wno-c++98-compat-pedantic
 build_directory = build
 
+platform_warning_flags = $$(if test -f /etc/alpine-release; then $
+    printf '%s ' '-Wno-disabled-macro-expansion'; $
+  elif test "$$(uname -s)" = Darwin; then $
+    case "$$($compiler --version)" in $
+      ("Apple clang"*) $
+        case "$$($compiler $compiler_flags -print-effective-triple)" in $
+          ("$$(uname -m)"-apple-darwin*|"$$(uname -m)"-apple-macos*) $
+            printf '%s ' '-Wno-poison-system-directories';; $
+        esac;; $
+    esac; $
+  fi)
+
 rule compile
-  command = $compiler $compiler_flags $$(pkg-config --cflags openssl | sed -E 's/(^| )-I/\1-isystem /g') -MMD -MF $out.d -c $in -o $out
+  command = $compiler $compiler_flags $platform_warning_flags $$(pkg-config --cflags openssl | sed -E 's/(^| )-I/\1-isystem /g') -MMD -MF $out.d -c $in -o $out
   depfile = $out.d
   deps = gcc
 
