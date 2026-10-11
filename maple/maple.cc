@@ -166,7 +166,7 @@ auto listen_socket(std::uint16_t port) -> maple::Descriptor {
       listen(listener.get(), SOMAXCONN) < 0) {
     perror("Unable to listen on the configured port");
 
-    return maple::Descriptor(-1);
+    listener = maple::Descriptor(-1);
   }
 
   return listener;

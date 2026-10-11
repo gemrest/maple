@@ -12,12 +12,11 @@ inline auto parse_size(std::string_view text) -> std::optional<std::size_t> {
     return std::nullopt;
   }
 
-  const char *text_end = text.data() + text.size();
   std::size_t value = 0;
   const auto [parsed_end, error] =
-      std::from_chars(text.data(), text_end, value);
+      std::from_chars(text.begin(), text.end(), value);
 
-  if (error != std::errc{} || parsed_end != text_end) {
+  if (error != std::errc{} || parsed_end != text.end()) {
     return std::nullopt;
   }
 

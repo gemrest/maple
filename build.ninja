@@ -3,7 +3,7 @@ compiler_flags = -std=c++20 -O2 -Weverything -Wno-padded -Wno-c++98-compat -Wno-
 build_directory = build
 
 rule compile
-  command = $compiler $compiler_flags $$(pkg-config --cflags openssl) -MMD -MF $out.d -c $in -o $out
+  command = $compiler $compiler_flags $$(pkg-config --cflags openssl | sed -E 's/(^| )-I/\1-isystem /g') -MMD -MF $out.d -c $in -o $out
   depfile = $out.d
   deps = gcc
 

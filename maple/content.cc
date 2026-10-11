@@ -86,7 +86,7 @@ auto open_read(std::string_view path) -> Descriptor {
 
   if (file.get() < 0 || fstat(file.get(), &status) < 0 ||
       !S_ISREG(status.st_mode)) {
-    return Descriptor(-1);
+    file = Descriptor(-1);
   }
 
   return file;
