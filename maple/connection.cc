@@ -6,6 +6,10 @@
 #include <poll.h>
 
 namespace maple {
+auto Connection::can_continue() const -> bool {
+  return !stopping_ && std::chrono::steady_clock::now() < deadline_;
+}
+
 auto Connection::record_progress() -> void {
   if (transferring_) {
     deadline_ = std::chrono::steady_clock::now() + transfer_timeout;
@@ -20,7 +24,7 @@ auto Connection::retry(int result) -> bool {
     return false;
   }
 
-  while (!stopping_ && std::chrono::steady_clock::now() < deadline_) {
+  while (can_continue()) {
     const auto remaining = deadline_ - std::chrono::steady_clock::now();
 
     if (remaining <= std::chrono::steady_clock::duration::zero()) {
@@ -44,11 +48,11 @@ auto Connection::retry(int result) -> bool {
 
     // Poll's writability threshold can exceed the space needed for a small write.
     if (ready == 0 && error == SSL_ERROR_WANT_WRITE) {
-      return !stopping_;
+      return can_continue();
     }
 
     if (ready > 0) {
-      return !stopping_ && (descriptor.revents & descriptor.events) != 0;
+      return can_continue() && (descriptor.revents & descriptor.events) != 0;
     }
   }
 
@@ -70,7 +74,7 @@ auto Connection::handshake() -> bool {
     return false;
   }
 
-  while (!stopping_ && std::chrono::steady_clock::now() < deadline_) {
+  while (can_continue()) {
     ERR_clear_error();
 
     const int result = SSL_accept(tls_session_.get());
@@ -89,7 +93,7 @@ auto Connection::handshake() -> bool {
 
 auto Connection::receive(char *buffer, std::size_t size_bytes,
                          std::size_t &byte_count) -> bool {
-  while (!stopping_ && std::chrono::steady_clock::now() < deadline_) {
+  while (can_continue()) {
     ERR_clear_error();
 
     const int result =
@@ -175,7 +179,7 @@ auto Connection::write(std::string_view response) -> bool {
   while (!response.empty()) {
     std::size_t byte_count = 0;
 
-    if (stopping_ || std::chrono::steady_clock::now() >= deadline_) {
+    if (!can_continue()) {
       return false;
     }
 

@@ -27,6 +27,7 @@ public:
   auto write(std::string_view response) -> bool;
 
 private:
+  auto can_continue() const -> bool;
   auto record_progress() -> void;
   auto retry(int result) -> bool;
   auto receive(char *buffer, std::size_t size_bytes, std::size_t &byte_count)
