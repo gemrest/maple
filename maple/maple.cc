@@ -27,10 +27,12 @@
 #include <cerrno>
 #include <cctype>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <netinet/in.h>
 #include <openssl/err.h>
@@ -41,6 +43,7 @@ namespace {
 volatile std::sig_atomic_t stopping = 0;
 
 struct Configuration {
+  std::uint16_t port = 1965;
   bool titan_enabled = false;
   std::string token;
   std::size_t maximum_upload_bytes = 1024;
@@ -48,6 +51,19 @@ struct Configuration {
 
 auto configuration() -> std::optional<Configuration> {
   Configuration settings;
+
+  if (const char *configured_port = std::getenv("MAPLE_PORT")) {
+    const auto port = maple::parse_size(configured_port);
+
+    if (!port || *port == 0 || *port > std::numeric_limits<std::uint16_t>::max()) {
+      std::cerr << "MAPLE_PORT must be an unsigned integer between 1 and 65535.\n";
+
+      return std::nullopt;
+    }
+
+    settings.port = static_cast<std::uint16_t>(*port);
+  }
+
   const char *enabled = std::getenv("TITAN");
 
   if (enabled == nullptr) {
@@ -152,13 +168,13 @@ auto serve_request(maple::Connection &connection, bool titan_enabled,
   return connection.write("20 text/gemini\r\nUpload complete.\n");
 }
 
-auto listen_socket() -> maple::Descriptor {
+auto listen_socket(std::uint16_t port) -> maple::Descriptor {
   maple::Descriptor listener(socket(AF_INET, SOCK_STREAM, 0));
   sockaddr_in address{};
   const int reuse_address = 1;
 
   address.sin_family = AF_INET;
-  address.sin_port = htons(1965);
+  address.sin_port = htons(port);
   address.sin_addr.s_addr = htonl(INADDR_ANY);
 
   if (listener.get() < 0 ||
@@ -168,7 +184,7 @@ auto listen_socket() -> maple::Descriptor {
       bind(listener.get(), reinterpret_cast<sockaddr *>(&address),
            sizeof(address)) < 0 ||
       listen(listener.get(), SOMAXCONN) < 0) {
-    perror("Unable to listen on port 1965");
+    perror("Unable to listen on the configured port");
 
     return maple::Descriptor(-1);
   }
@@ -221,7 +237,7 @@ auto main() -> int {
     return EXIT_FAILURE;
   }
 
-  const auto listener = listen_socket();
+  const auto listener = listen_socket(settings->port);
 
   if (listener.get() < 0) {
     return EXIT_FAILURE;

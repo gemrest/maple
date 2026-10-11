@@ -17,9 +17,8 @@ printf '# Welcome\n' > .maple/gmi/index.gmi
 build/maple
 ```
 
-`ninja check` uses temporary content and certificates, and requires local port
-1965 to be free. It checks request framing, filesystem containment, uploads,
-connection deadlines, shutdown, and incremental builds.
+Maple listens on TCP port 1965 by default. Set `MAPLE_PORT` to an unsigned decimal
+integer from 1 to 65535 to use another port, for example `MAPLE_PORT=1966 build/maple`.
 
 With Nix:
 

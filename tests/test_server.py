@@ -14,7 +14,6 @@ import unittest
 
 CONFIGURATION_TIMEOUT_SECONDS = 0.5
 CONNECTION_TIMEOUT_SECONDS = 2
-DEFAULT_PORT = 1965
 IDLE_CONNECTION_TIMEOUT_SECONDS = 1
 PROCESS_EXIT_TIMEOUT_SECONDS = 2
 QUEUED_REQUEST_TIMEOUT_SECONDS = 35
@@ -73,26 +72,32 @@ class ServerTests(unittest.TestCase):
 
     def start(self, **settings):
         with socket.socket() as reservation:
-            reservation.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            reservation.bind(('127.0.0.1', DEFAULT_PORT))
+            reservation.bind(('', 0))
 
-        environment = {key: value for key, value in os.environ.items() if not key.startswith('TITAN')}
+            self.port = reservation.getsockname()[1]
 
-        environment.update(TITAN='1', TITAN_MAX_SIZE='8192')
+        environment = {
+            key: value for key, value in os.environ.items()
+            if not key.startswith('TITAN') and key != 'MAPLE_PORT'
+        }
+
+        environment.update(TITAN='1', TITAN_MAX_SIZE='8192', MAPLE_PORT=str(self.port))
         environment.update(settings)
 
         self.process = subprocess.Popen(
             [str(self.binary)], cwd=self.directory, env=environment,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         )
         startup_deadline_seconds = time.monotonic() + STARTUP_TIMEOUT_SECONDS
 
         while time.monotonic() < startup_deadline_seconds:
             if self.process.poll() is not None:
-                self.fail(f'Server exited at startup: {self.process.returncode}')
+                error = self.process.stderr.read().decode(errors='replace')
+
+                self.fail(f'Server exited at startup ({self.process.returncode}): {error}')
 
             try:
-                with socket.create_connection(('127.0.0.1', DEFAULT_PORT), timeout=STARTUP_PROBE_TIMEOUT_SECONDS):
+                with socket.create_connection(('127.0.0.1', self.port), timeout=STARTUP_PROBE_TIMEOUT_SECONDS):
                     return
             except ConnectionRefusedError:
                 time.sleep(STARTUP_POLL_INTERVAL_SECONDS)
@@ -110,8 +115,10 @@ class ServerTests(unittest.TestCase):
                 self.process.kill()
                 self.process.wait(timeout=PROCESS_EXIT_TIMEOUT_SECONDS)
 
+            self.process.stderr.close()
+
     def connect(self, timeout_seconds=CONNECTION_TIMEOUT_SECONDS):
-        connection = socket.create_connection(('127.0.0.1', DEFAULT_PORT), timeout=timeout_seconds)
+        connection = socket.create_connection(('127.0.0.1', self.port), timeout=timeout_seconds)
 
         try:
             return self.context.wrap_socket(connection, server_hostname='localhost')
@@ -146,6 +153,32 @@ class ServerTests(unittest.TestCase):
         self.start()
         self.assertEqual(self.request(b'gemini://localhost/existing.gmi\r\n'),
                          b'20 text/gemini\r\nORIGINAL')
+
+    def test_configured_port_without_titan(self):
+        self.start(TITAN='0')
+        self.assertEqual(self.request(b'gemini://localhost/existing.gmi\r\n'),
+                         b'20 text/gemini\r\nORIGINAL')
+        self.assertTrue(self.upload('/existing.gmi', b'CHANGED').startswith(b'59'))
+
+    def test_invalid_configured_port(self):
+        for port in ('', '0', '-1', '65536', '+1965', '1965junk', ' 1965',
+                     '99999999999999999999999999'):
+            with self.subTest(port=port):
+                environment = {
+                    key: value for key, value in os.environ.items()
+                    if not key.startswith('TITAN') and key != 'MAPLE_PORT'
+                }
+
+                environment['MAPLE_PORT'] = port
+
+                result = subprocess.run(
+                    [str(self.binary)], cwd=self.directory, env=environment,
+                    capture_output=True, timeout=CONFIGURATION_TIMEOUT_SECONDS,
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(b'MAPLE_PORT must be an unsigned integer between 1 and 65535.',
+                              result.stderr)
 
     def test_upload_traversal(self):
         self.start()
@@ -214,7 +247,7 @@ class ServerTests(unittest.TestCase):
                 outgoing = ssl.MemoryBIO()
                 session = self.context.wrap_bio(incoming, outgoing, server_hostname='localhost')
 
-                with socket.create_connection(('127.0.0.1', DEFAULT_PORT), timeout=CONNECTION_TIMEOUT_SECONDS) as transport:
+                with socket.create_connection(('127.0.0.1', self.port), timeout=CONNECTION_TIMEOUT_SECONDS) as transport:
                     while True:
                         try:
                             session.do_handshake()
@@ -274,11 +307,14 @@ class ServerTests(unittest.TestCase):
 
     def test_negative_configured_size(self):
         environment = {**os.environ, 'TITAN': '1', 'TITAN_MAX_SIZE': '-1'}
+
+        environment.pop('MAPLE_PORT', None)
+
         result = subprocess.run([str(self.binary)], cwd=self.directory, env=environment,
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                timeout=CONFIGURATION_TIMEOUT_SECONDS)
+                                capture_output=True, timeout=CONFIGURATION_TIMEOUT_SECONDS)
 
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b'TITAN_MAX_SIZE must be an unsigned integer.', result.stderr)
 
     def test_fragmented_request_and_body(self):
         self.start()
@@ -367,7 +403,7 @@ class ServerTests(unittest.TestCase):
     def test_idle_handshake_expires(self):
         self.start()
 
-        with socket.create_connection(('127.0.0.1', DEFAULT_PORT), timeout=IDLE_CONNECTION_TIMEOUT_SECONDS):
+        with socket.create_connection(('127.0.0.1', self.port), timeout=IDLE_CONNECTION_TIMEOUT_SECONDS):
             with self.connect(timeout_seconds=REQUEST_EXPIRY_TIMEOUT_SECONDS) as connection:
                 connection.sendall(b'gemini://localhost/\r\n')
                 self.assertIn(b'INDEX', self.read_response(connection))
@@ -430,7 +466,7 @@ class ServerTests(unittest.TestCase):
     def test_shutdown_during_handshake(self):
         self.start()
 
-        with socket.create_connection(('127.0.0.1', DEFAULT_PORT), timeout=IDLE_CONNECTION_TIMEOUT_SECONDS):
+        with socket.create_connection(('127.0.0.1', self.port), timeout=IDLE_CONNECTION_TIMEOUT_SECONDS):
             time.sleep(SHUTDOWN_SETTLE_SECONDS)
             self.process.send_signal(signal.SIGTERM)
             self.assertEqual(self.process.wait(timeout=PROCESS_EXIT_TIMEOUT_SECONDS), 0)
