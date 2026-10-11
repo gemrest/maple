@@ -24,10 +24,9 @@ With Nix:
 
 ```sh
 nix develop
+nix flake check
 nix build
 ```
-
-The Nix package also runs the regression suite during its build.
 
 ## Content and Certificates
 

@@ -16,6 +16,7 @@ build
 .ninja_deps
 
 # Nix
+.direnv/
 result
 
 # Python Tests
