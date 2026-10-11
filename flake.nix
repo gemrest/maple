@@ -31,7 +31,7 @@
           packageSet = packageSets.${system};
           maple = packageSet.clangStdenv.mkDerivation {
             pname = "maple";
-            version = "0.1.6";
+            version = "0.2.0";
             src = packageSet.lib.fileset.toSource {
               root = ./.;
               fileset = packageSet.lib.fileset.unions [
