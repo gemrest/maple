@@ -3,11 +3,14 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   inputs.nixpkgs-intel-darwin.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
 
+  # Tsutsumi calls these outputs directly with its own arguments, so new inputs
+  # need defaults and unknown arguments must be accepted.
   outputs =
     {
       nixpkgs,
-      nixpkgs-intel-darwin,
+      nixpkgs-intel-darwin ? nixpkgs,
       self,
+      ...
     }:
     let
       forEachSystem = nixpkgs.lib.genAttrs [
